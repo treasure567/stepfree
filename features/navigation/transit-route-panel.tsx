@@ -46,6 +46,7 @@ export function TransitRoutePanel({
     typeof window === "undefined" ? undefined : getSessionId(),
   );
   const [guidanceStarted, setGuidanceStarted] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const savedFingerprint = useRef("");
   const saveJourney = useMutation(api.journeys.save);
 
@@ -102,6 +103,7 @@ export function TransitRoutePanel({
   function plan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setGuidanceStarted(false);
+    setCurrentStep(0);
     setRouteRequest({ fromSlug, toSlug });
     window.history.replaceState(
       null,
@@ -200,28 +202,125 @@ export function TransitRoutePanel({
             </div>
           ) : null}
 
-          <div className="navigator-stops">
-            {routePlan.stations.map((station, index) => {
-              const segment = routePlan.segments[index];
-              return (
-                <div key={station.id} className={guidanceStarted && index === 0 ? "is-current" : ""}>
-                  <span>{index === 0 ? "A" : lineCode(segment?.line ?? "")}</span>
-                  <p><strong>{station.name}</strong><small>{index === 0 ? "Start" : segment?.line}</small></p>
-                  {index < routePlan.stations.length - 1 ? <ArrowRight aria-hidden="true" /> : <Navigation aria-hidden="true" />}
+          {(() => {
+            const total = routePlan.stations.length;
+            const step = Math.min(currentStep, total - 1);
+            const stepInstruction = (i: number): string => {
+              const name = routePlan.stations[i]?.name ?? "";
+              if (i === 0) {
+                const board = routePlan.segments[1]?.line;
+                return board
+                  ? `Start at ${name}. Board the ${board} line.`
+                  : `Start at ${name}.`;
+              }
+              if (i === total - 1) {
+                return `Arrive at ${name} — step-free, you're there.`;
+              }
+              const arriving = routePlan.segments[i]?.line;
+              const next = routePlan.segments[i + 1]?.line;
+              if (arriving && next && arriving !== next) {
+                return `At ${name}, change to the ${next} line.`;
+              }
+              return arriving
+                ? `Continue through ${name} on the ${arriving} line.`
+                : `Continue through ${name}.`;
+            };
+            return (
+              <>
+                <div className="navigator-stops">
+                  {routePlan.stations.map((station, index) => {
+                    const segment = routePlan.segments[index];
+                    return (
+                      <div
+                        key={station.id}
+                        className={guidanceStarted && index === step ? "is-current" : ""}
+                        onClick={
+                          guidanceStarted ? () => setCurrentStep(index) : undefined
+                        }
+                        role={guidanceStarted ? "button" : undefined}
+                      >
+                        <span>{index === 0 ? "A" : lineCode(segment?.line ?? "")}</span>
+                        <p>
+                          <strong>{station.name}</strong>
+                          <small>{index === 0 ? "Start" : segment?.line}</small>
+                        </p>
+                        {index < routePlan.stations.length - 1 ? (
+                          <ArrowRight aria-hidden="true" />
+                        ) : (
+                          <Navigation aria-hidden="true" />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
 
-          <button
-            type="button"
-            className="start-guidance-button"
-            onClick={() => setGuidanceStarted(true)}
-            disabled={guidanceStarted}
-          >
-            <Navigation aria-hidden="true" />
-            {guidanceStarted ? "Guidance active" : "Start transit guidance"}
-          </button>
+                {guidanceStarted ? (
+                  <div className="navigator-guidance">
+                    <div className="navigator-guidance-head">
+                      <span>Step {step + 1} of {total}</span>
+                      <button
+                        type="button"
+                        className="navigator-guidance-stop"
+                        onClick={() => {
+                          setGuidanceStarted(false);
+                          setCurrentStep(0);
+                        }}
+                      >
+                        Stop
+                      </button>
+                    </div>
+                    <p className="navigator-guidance-instruction">
+                      {stepInstruction(step)}
+                    </p>
+                    <div className="navigator-guidance-controls">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCurrentStep((s) => Math.max(0, s - 1))
+                        }
+                        disabled={step === 0}
+                      >
+                        Back
+                      </button>
+                      {step < total - 1 ? (
+                        <button
+                          type="button"
+                          className="is-primary"
+                          onClick={() =>
+                            setCurrentStep((s) => Math.min(total - 1, s + 1))
+                          }
+                        >
+                          Next stop <ArrowRight aria-hidden="true" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="is-primary"
+                          onClick={() => {
+                            setGuidanceStarted(false);
+                            setCurrentStep(0);
+                          }}
+                        >
+                          Finish <Check aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="start-guidance-button"
+                    onClick={() => {
+                      setGuidanceStarted(true);
+                      setCurrentStep(0);
+                    }}
+                  >
+                    <Navigation aria-hidden="true" /> Start transit guidance
+                  </button>
+                )}
+              </>
+            );
+          })()}
           <div className="route-evidence-line">
             <Clock3 aria-hidden="true" />
             {routePlan.lastCheckedAt

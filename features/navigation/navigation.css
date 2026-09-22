@@ -476,6 +476,83 @@
   font-size: 0.62rem;
 }
 
+.navigator-stops > div.is-current {
+  background: color-mix(in srgb, var(--lime) 22%, #ffffff);
+  box-shadow: inset 3px 0 0 var(--lime);
+}
+.navigator-stops > div[role="button"] {
+  cursor: pointer;
+}
+
+.navigator-guidance {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.navigator-guidance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #696969;
+}
+.navigator-guidance-stop {
+  border: 1px solid #dedede;
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #111111;
+  cursor: pointer;
+}
+.navigator-guidance-instruction {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: #111111;
+}
+.navigator-guidance-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.navigator-guidance-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  border: 1px solid #dedede;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #111111;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.navigator-guidance-controls button.is-primary {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.navigator-guidance-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.navigator-guidance-controls svg {
+  width: 16px;
+  height: 16px;
+}
+
 .route-evidence-line {
   display: flex;
   align-items: center;

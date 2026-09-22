@@ -385,6 +385,15 @@ export function AccessMap({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!mapReady || !map || !containerRef.current) return;
+    const observer = new ResizeObserver(() => map.resize());
+    observer.observe(containerRef.current);
+    map.resize();
+    return () => observer.disconnect();
+  }, [mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
 
     if (!mapReady || !map) {
       return;
