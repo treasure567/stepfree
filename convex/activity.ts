@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
@@ -113,6 +114,39 @@ const PROVIDERS: Provider[] = [
   "tfl",
   "system",
 ];
+
+export const page = query({
+  args: {
+    provider: v.optional(providerValidator),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const base = args.provider
+      ? ctx.db
+          .query("activity")
+          .withIndex("by_provider", (q) => q.eq("provider", args.provider!))
+      : ctx.db.query("activity").withIndex("by_created");
+    const scoped =
+      args.from !== undefined || args.to !== undefined
+        ? base.filter((q) => {
+            if (args.from !== undefined && args.to !== undefined) {
+              return q.and(
+                q.gte(q.field("createdAt"), args.from),
+                q.lte(q.field("createdAt"), args.to),
+              );
+            }
+            if (args.from !== undefined) {
+              return q.gte(q.field("createdAt"), args.from);
+            }
+            return q.lte(q.field("createdAt"), args.to!);
+          })
+        : base;
+    return await scoped.order("desc").paginate(args.paginationOpts);
+  },
+});
 
 export const stats = query({
   args: { window: v.optional(v.number()) },

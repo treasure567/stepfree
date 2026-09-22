@@ -151,7 +151,11 @@ export const requestDrillAlert = mutation({
 
     const recipient = args.email
       ? validateEmail(args.email)
-      : (process.env.AGENTMAIL_INBOX_ID ?? "").trim();
+      : (
+          process.env.DEMO_ALERT_RECIPIENT?.trim() ||
+          process.env.AGENTMAIL_SMTP_USER?.trim() ||
+          ""
+        );
 
     if (!recipient) {
       throw new ConvexError({ code: "NO_RECIPIENT" });

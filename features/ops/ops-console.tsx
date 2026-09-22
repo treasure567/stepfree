@@ -2,7 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useAction, useMutation, useQuery } from "convex/react";
+import {
+  useAction,
+  useMutation,
+  usePaginatedQuery,
+  useQuery,
+} from "convex/react";
 import {
   Activity,
   AlertTriangle,
@@ -44,6 +49,37 @@ function providerMeta(provider: string) {
   return PROVIDER_META[provider] ?? { label: provider, className: "is-system" };
 }
 
+type ProviderKey =
+  | "convex"
+  | "openai"
+  | "firecrawl"
+  | "agentmail"
+  | "valhalla"
+  | "tfl"
+  | "system";
+
+const PROVIDER_ORDER: ProviderKey[] = [
+  "agentmail",
+  "firecrawl",
+  "openai",
+  "tfl",
+  "convex",
+  "valhalla",
+  "system",
+];
+
+function dayStart(value: string): number | undefined {
+  if (!value) return undefined;
+  const ms = new Date(`${value}T00:00:00`).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+function dayEnd(value: string): number | undefined {
+  if (!value) return undefined;
+  const ms = new Date(`${value}T23:59:59.999`).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 function clockAt(ts: number) {
   return new Date(ts).toLocaleTimeString([], {
     hour: "2-digit",
@@ -76,6 +112,11 @@ export function OpsConsole() {
   const arg = authed ? {} : "skip";
   const [section, setSection] = useState<SectionId>("overview");
   const [openPayload, setOpenPayload] = useState<string | null>(null);
+  const [actProvider, setActProvider] = useState<ProviderKey | "">("");
+  const [actFrom, setActFrom] = useState("");
+  const [actTo, setActTo] = useState("");
+  const [hookFrom, setHookFrom] = useState("");
+  const [hookTo, setHookTo] = useState("");
 
   const metrics = useQuery(api.ops.metrics, arg);
   const emergencies = useQuery(api.emergency.active, arg) ?? [];
@@ -87,10 +128,26 @@ export function OpsConsole() {
   const failedEvents = useQuery(api.events.failed, arg) ?? [];
   const runs = useQuery(api.review.recentRuns, arg) ?? [];
   const syncStatus = useQuery(api.tfl.getSyncStatus, arg);
-  const receipts = useQuery(api.webhooks.receipts, arg) ?? [];
   const inbound = useQuery(api.webhooks.recentInbound, arg) ?? [];
-  const activity = useQuery(api.activity.recent, authed ? { limit: 60 } : "skip") ?? [];
+  const activity = useQuery(api.activity.recent, authed ? { limit: 8 } : "skip") ?? [];
   const activityStats = useQuery(api.activity.stats, arg);
+
+  const activityPage = usePaginatedQuery(
+    api.activity.page,
+    authed
+      ? {
+          provider: actProvider || undefined,
+          from: dayStart(actFrom),
+          to: dayEnd(actTo),
+        }
+      : "skip",
+    { initialNumItems: 25 },
+  );
+  const webhookPage = usePaginatedQuery(
+    api.webhooks.receiptsPage,
+    authed ? { from: dayStart(hookFrom), to: dayEnd(hookTo) } : "skip",
+    { initialNumItems: 12 },
+  );
 
   const acknowledge = useMutation(api.emergency.acknowledge);
   const resolveEmergency = useMutation(api.emergency.resolve);
@@ -349,53 +406,112 @@ export function OpsConsole() {
     </div>
   );
 
+  const activityFiltered = actProvider !== "" || actFrom !== "" || actTo !== "";
   const activityView = (
     <div className="ops-card">
       <h2>Activity &amp; provider telemetry</h2>
       <p className="ops-sub">
         Every meaningful action StepFree takes is logged with the provider that
-        performed it.
+        performed it. Filter by provider or date.
       </p>
-      {activityStats ? (
-        <div className="ops-chips">
-          {Object.entries(activityStats.byProvider)
-            .filter(([, count]) => count > 0)
-            .map(([provider, count]) => (
-              <span
-                key={provider}
-                className={`ops-provider ${providerMeta(provider).className}`}
-              >
-                {providerMeta(provider).label} {count}
-              </span>
-            ))}
-        </div>
-      ) : null}
-      {activity.length === 0 ? (
+      <div className="ops-chips">
+        <button
+          type="button"
+          className={`ops-provider is-filter${actProvider === "" ? " is-on" : ""}`}
+          onClick={() => setActProvider("")}
+        >
+          All{activityStats ? ` ${activityStats.total}` : ""}
+        </button>
+        {PROVIDER_ORDER.filter(
+          (provider) => (activityStats?.byProvider[provider] ?? 0) > 0,
+        ).map((provider) => (
+          <button
+            key={provider}
+            type="button"
+            className={`ops-provider ${providerMeta(provider).className}${
+              actProvider === provider ? " is-on" : ""
+            }`}
+            onClick={() =>
+              setActProvider(actProvider === provider ? "" : provider)
+            }
+          >
+            {providerMeta(provider).label} {activityStats?.byProvider[provider] ?? 0}
+          </button>
+        ))}
+      </div>
+      <div className="ops-filters">
+        <label>
+          From
+          <input
+            type="date"
+            value={actFrom}
+            max={actTo || undefined}
+            onChange={(e) => setActFrom(e.target.value)}
+          />
+        </label>
+        <label>
+          To
+          <input
+            type="date"
+            value={actTo}
+            min={actFrom || undefined}
+            onChange={(e) => setActTo(e.target.value)}
+          />
+        </label>
+        {activityFiltered ? (
+          <button
+            type="button"
+            className="ops-filter-clear"
+            onClick={() => {
+              setActProvider("");
+              setActFrom("");
+              setActTo("");
+            }}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {activityPage.results.length === 0 ? (
         <p className="ops-empty">
-          No activity yet. Run the evidence pipeline or trigger a drill to see
-          the stream fill up.
+          {activityFiltered
+            ? "No activity matches these filters."
+            : "No activity yet. Run the evidence pipeline or trigger a drill to see the stream fill up."}
         </p>
       ) : (
-        <ul className="ops-feed">
-          {activity.map((row) => (
-            <li key={row._id} className={`ops-feed-row is-${row.level}`}>
-              <span className={`ops-dot is-${row.level}`} aria-hidden="true" />
-              <div className="ops-feed-body">
-                <p>{row.summary}</p>
-                <small>
-                  <span
-                    className={`ops-provider ${providerMeta(row.provider).className}`}
-                  >
-                    {providerMeta(row.provider).label}
-                  </span>
-                  <span className="ops-feed-action">{row.action}</span>
-                  {row.actor ? <span>· {row.actor}</span> : null}
-                  <span>· {relativeTime(row.createdAt)}</span>
-                </small>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="ops-feed">
+            {activityPage.results.map((row) => (
+              <li key={row._id} className={`ops-feed-row is-${row.level}`}>
+                <span className={`ops-dot is-${row.level}`} aria-hidden="true" />
+                <div className="ops-feed-body">
+                  <p>{row.summary}</p>
+                  <small>
+                    <span
+                      className={`ops-provider ${providerMeta(row.provider).className}`}
+                    >
+                      {providerMeta(row.provider).label}
+                    </span>
+                    <span className="ops-feed-action">{row.action}</span>
+                    {row.actor ? <span>· {row.actor}</span> : null}
+                    <span>· {relativeTime(row.createdAt)}</span>
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {activityPage.status === "CanLoadMore" ||
+          activityPage.status === "LoadingMore" ? (
+            <button
+              type="button"
+              className="ops-loadmore"
+              onClick={() => activityPage.loadMore(25)}
+              disabled={activityPage.status === "LoadingMore"}
+            >
+              {activityPage.status === "LoadingMore" ? "Loading…" : "Load more"}
+            </button>
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -481,6 +597,7 @@ export function OpsConsole() {
     </div>
   );
 
+  const hookFiltered = hookFrom !== "" || hookTo !== "";
   const webhooksView = (
     <div className="ops-card">
       <h2>Webhook receipts</h2>
@@ -488,11 +605,47 @@ export function OpsConsole() {
         Signed, deduplicated and stored. Open a receipt to inspect the exact
         payload we received.
       </p>
-      {receipts.length === 0 ? (
-        <p className="ops-empty">No webhook traffic yet.</p>
+      <div className="ops-filters">
+        <label>
+          From
+          <input
+            type="date"
+            value={hookFrom}
+            max={hookTo || undefined}
+            onChange={(e) => setHookFrom(e.target.value)}
+          />
+        </label>
+        <label>
+          To
+          <input
+            type="date"
+            value={hookTo}
+            min={hookFrom || undefined}
+            onChange={(e) => setHookTo(e.target.value)}
+          />
+        </label>
+        {hookFiltered ? (
+          <button
+            type="button"
+            className="ops-filter-clear"
+            onClick={() => {
+              setHookFrom("");
+              setHookTo("");
+            }}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {webhookPage.results.length === 0 ? (
+        <p className="ops-empty">
+          {hookFiltered
+            ? "No webhook traffic in this range."
+            : "No webhook traffic yet."}
+        </p>
       ) : (
         <ul className="ops-list">
-          {receipts.map((rec) => {
+          {webhookPage.results.map((rec) => {
             const isOpen = openPayload === rec._id;
             return (
               <li key={rec._id} className={`ops-row is-${rec.status}`}>
@@ -529,6 +682,17 @@ export function OpsConsole() {
           })}
         </ul>
       )}
+      {webhookPage.status === "CanLoadMore" ||
+      webhookPage.status === "LoadingMore" ? (
+        <button
+          type="button"
+          className="ops-loadmore"
+          onClick={() => webhookPage.loadMore(12)}
+          disabled={webhookPage.status === "LoadingMore"}
+        >
+          {webhookPage.status === "LoadingMore" ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
     </div>
   );
 

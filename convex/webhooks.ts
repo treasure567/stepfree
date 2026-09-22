@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/core";
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
@@ -245,6 +246,37 @@ export const receipts = query({
       .withIndex("by_received_at")
       .order("desc")
       .take(limit);
+  },
+});
+
+export const receiptsPage = query({
+  args: {
+    source: v.optional(v.string()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const base = ctx.db.query("webhookReceipts").withIndex("by_received_at");
+    const hasFilter =
+      Boolean(args.source) || args.from !== undefined || args.to !== undefined;
+    const scoped = hasFilter
+      ? base.filter((q) => {
+          const conds = [];
+          if (args.source) {
+            conds.push(q.eq(q.field("source"), args.source));
+          }
+          if (args.from !== undefined) {
+            conds.push(q.gte(q.field("receivedAt"), args.from));
+          }
+          if (args.to !== undefined) {
+            conds.push(q.lte(q.field("receivedAt"), args.to));
+          }
+          return conds.length === 1 ? conds[0] : q.and(...conds);
+        })
+      : base;
+    return await scoped.order("desc").paginate(args.paginationOpts);
   },
 });
 
