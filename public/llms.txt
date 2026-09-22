@@ -1,0 +1,42 @@
+# StepFree
+
+> A live step-free accessibility layer for public transit. When a station lift fails, StepFree catches the evidence, reroutes a wheelchair or mobility-impaired traveller around the broken lift, and emails them the new route before they reach the barrier. Built for the Convex "All Gas" hackathon.
+
+## Links
+
+- Live: https://whimsical-ferret-778.convex.site
+- Judge demo (live, no login): https://whimsical-ferret-778.convex.site/proof
+- Repository: https://github.com/treasure567/stepfree
+
+## What it does
+
+- Watches official transit access notices and live lift feeds, structures the changes into verified evidence, and reroutes journeys around step-free failures in real time.
+- Demo journey: Waterloo to Barbican, 31 minutes via Bond Street. When Bond Street's lift fails, the route re-solves to London Bridge (36 minutes, +5), live with no page refresh, and the traveller is alerted before reaching the barrier.
+- Pilot scope: a curated 9-station London Underground network (9 stations, 9 connections).
+
+## Safety boundary
+
+- AI can read the notice; it cannot declare a route safe. Routing is deterministic Dijkstra graph search, never an LLM.
+- A route blocks only on a human-reviewed, route-blocking incident (humanReviewed === true) or the controlled demo drill within its own session.
+- The official TfL live lift feed is advisory-only until a human accepts it.
+- Every extracted candidate must include a source excerpt that exists verbatim in the scraped page; fabricated excerpts are refused. Unknown-station and low-confidence (< 0.7) candidates stay pending.
+- Provenance: every incident and candidate stores source URL, fetch time, SHA-256 content hash, model name, and the verbatim excerpt.
+
+## Stack
+
+- Frontend: Next.js 16 (static export), React 19, TypeScript, maplibre-gl, installable PWA.
+- Backend: Convex (queries, mutations, actions, internal functions, scheduler, crons, HTTP router, Convex Auth, rate-limiter, static-hosting component serving the app from convex.site).
+- External services: Firecrawl, OpenAI (gpt-5.4-mini), AgentMail, TfL Unified API, Valhalla.
+
+## Sponsor usage
+
+- Firecrawl: scrapes one fixed official TfL "stations, lifts and escalators works and closures" page to markdown on a 6-hour cron; fixed URL (SSRF-safe); SHA-256 content hash dedupes unchanged pages.
+- OpenAI: gpt-5.4-mini via the Responses API with a strict JSON schema extracts incident candidates plus a verbatim source excerpt; instructed not to infer facts; outputs candidates for human review, never routes.
+- Convex: holds all state and serves reactive live queries that drive the no-refresh reroute; runs the scheduler (decoupled alert delivery), crons (TfL sync every 5 minutes, evidence extraction every 6 hours), Convex Auth, the rate-limiter, and static hosting.
+- AgentMail: delivers account verification codes and traveller route alerts through an idempotent queue with a queued -> sending -> sent -> delivered/bounced/failed status machine.
+
+## Honest limits
+
+- The 9-station network is a pilot, not the full TfL graph.
+- Live TfL lift data is real context; the Bond Street incident on /proof is a labelled controlled drill.
+- AgentMail send currently returns HTTP 403 (the API key needs message_send permission / account verification); the full alert pipeline is built and verified end-to-end except the final provider call, and delivery resumes once the key can send.
