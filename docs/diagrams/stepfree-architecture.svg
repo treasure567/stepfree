@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 900" font-family="'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b6b66"/>
+    </marker>
+    <style>
+      .band { fill:#eceae3; }
+      .bandlabel { fill:#8a938f; font-size:12px; font-weight:700; letter-spacing:2px; }
+      .box { fill:#ffffff; stroke:#20302b; stroke-width:1.5; rx:12; }
+      .core { fill:#f2f8ec; stroke:#3f7d34; stroke-width:1.5; }
+      .prov { fill:#fdece6; stroke:#c0603f; stroke-width:1.5; }
+      .comp { fill:#e8f0fb; stroke:#2f6bd0; stroke-width:1.5; }
+      .db { fill:#efe9fb; stroke:#5b3fa8; stroke-width:1.5; }
+      .title { fill:#16211d; font-size:15px; font-weight:700; text-anchor:middle; }
+      .sub { fill:#5b6b66; font-size:11.5px; text-anchor:middle; }
+      .edge { stroke:#5b6b66; stroke-width:1.6; fill:none; }
+      .edgelabel { fill:#5b6b66; font-size:11px; text-anchor:middle; }
+      .green { stroke:#3f7d34; }
+    </style>
+  </defs>
+
+  <rect width="1240" height="900" fill="#f6f5f1"/>
+  <text x="40" y="46" fill="#16211d" font-size="26" font-weight="800">StepFree — system architecture</text>
+  <text x="40" y="72" fill="#5b6b66" font-size="14">One accessibility incident · four sponsors · one deterministic, human-gated reroute — live, no refresh.</text>
+
+  <!-- Band: clients -->
+  <rect class="band" x="24" y="96" width="1192" height="104" rx="14"/>
+  <text class="bandlabel" x="44" y="120">CLIENTS</text>
+  <rect class="box" x="120" y="128" width="300" height="60" rx="12"/>
+  <text class="title" x="270" y="153">Traveller</text>
+  <text class="sub" x="270" y="172">installable PWA · React 19</text>
+  <rect class="box" x="820" y="128" width="300" height="60" rx="12"/>
+  <text class="title" x="970" y="153">Reviewer / Ops</text>
+  <text class="sub" x="970" y="172">authenticated · Convex Auth</text>
+
+  <!-- Band: edge -->
+  <rect class="band" x="24" y="216" width="1192" height="104" rx="14"/>
+  <text class="bandlabel" x="44" y="240">EDGE · convex.site</text>
+  <rect class="box" x="120" y="248" width="300" height="60" rx="12"/>
+  <text class="title" x="270" y="273">Static hosting</text>
+  <text class="sub" x="270" y="292">Next.js 16 export · SPA fallback</text>
+  <rect class="box" x="820" y="248" width="300" height="60" rx="12"/>
+  <text class="title" x="970" y="273">HTTP router</text>
+  <text class="sub" x="970" y="292">/health · /webhooks/* · /auth</text>
+
+  <!-- Band: convex backend -->
+  <rect class="core" x="24" y="336" width="1192" height="352" rx="16"/>
+  <text class="bandlabel" x="44" y="360" fill="#3f7d34">CONVEX DEPLOYMENT · one backend</text>
+
+  <rect class="box" x="60" y="380" width="352" height="62" rx="12"/>
+  <text class="title" x="236" y="405">Reactive queries</text>
+  <text class="sub" x="236" y="424">route · evidence · alerts · no polling</text>
+  <rect class="box" x="444" y="380" width="352" height="62" rx="12"/>
+  <text class="title" x="620" y="405">Mutations</text>
+  <text class="sub" x="620" y="424">human-review gate + state machines</text>
+  <rect class="box" x="828" y="380" width="352" height="62" rx="12"/>
+  <text class="title" x="1004" y="405">Actions</text>
+  <text class="sub" x="1004" y="424">provider I/O · off the write path</text>
+
+  <rect class="box" x="60" y="458" width="352" height="62" rx="12"/>
+  <text class="title" x="236" y="483">Event bus</text>
+  <text class="sub" x="236" y="502">idempotent publish · scheduler dispatch</text>
+  <rect class="box" x="444" y="458" width="352" height="62" rx="12"/>
+  <text class="title" x="620" y="483">Scheduler + Crons</text>
+  <text class="sub" x="620" y="502">decoupled sends · 3 cron jobs</text>
+  <rect class="db" x="828" y="458" width="352" height="62" rx="12"/>
+  <text class="title" x="1004" y="483">Database</text>
+  <text class="sub" x="1004" y="502">20 tables · 55 indexes</text>
+
+  <rect class="box" x="60" y="536" width="352" height="62" rx="12"/>
+  <text class="title" x="236" y="561">Workflows ×2</text>
+  <text class="sub" x="236" y="580">evidence pipeline · SOS escalation</text>
+  <rect class="box" x="444" y="536" width="352" height="62" rx="12"/>
+  <text class="title" x="620" y="561">Workpools ×2</text>
+  <text class="sub" x="620" y="580">extractionPool · deliveryPool</text>
+  <rect class="box" x="828" y="536" width="352" height="62" rx="12"/>
+  <text class="title" x="1004" y="561">Emergency service</text>
+  <text class="sub" x="1004" y="580">SOS → event → durable escalation</text>
+
+  <rect class="comp" x="60" y="616" width="1120" height="52" rx="12"/>
+  <text x="620" y="642" fill="#2f6bd0" font-size="13" font-weight="700" text-anchor="middle">Mounted components</text>
+  <text x="620" y="659" fill="#3a4d75" font-size="12" text-anchor="middle">@convex-dev/auth · rate-limiter · static-hosting · workflow · workpool (extraction + delivery)</text>
+
+  <!-- Band: providers -->
+  <rect class="band" x="24" y="704" width="1192" height="150" rx="14"/>
+  <text class="bandlabel" x="44" y="728">EXTERNAL SERVICES</text>
+  <rect class="prov" x="70" y="740" width="250" height="92" rx="12"/>
+  <text class="title" x="195" y="775">Firecrawl</text>
+  <text class="sub" x="195" y="795">scrape official TfL page</text>
+  <text class="sub" x="195" y="812">6h cron · SSRF-safe</text>
+  <rect class="prov" x="360" y="740" width="250" height="92" rx="12"/>
+  <text class="title" x="485" y="775">OpenAI</text>
+  <text class="sub" x="485" y="795">gpt-5.4-mini · strict JSON</text>
+  <text class="sub" x="485" y="812">candidate + verbatim excerpt</text>
+  <rect class="prov" x="650" y="740" width="250" height="92" rx="12"/>
+  <text class="title" x="775" y="775">AgentMail</text>
+  <text class="sub" x="775" y="795">idempotent alert queue</text>
+  <text class="sub" x="775" y="812">delivery + inbound webhooks</text>
+  <rect class="prov" x="940" y="740" width="250" height="92" rx="12"/>
+  <text class="title" x="1065" y="775">TfL live feed</text>
+  <text class="sub" x="1065" y="795">5-min sync · advisory only</text>
+  <text class="sub" x="1065" y="812">never blocks until reviewed</text>
+
+  <!-- edges -->
+  <path class="edge" d="M270 188 L270 248" marker-end="url(#arrow)"/>
+  <path class="edge" d="M970 188 L970 248" marker-end="url(#arrow)"/>
+  <path class="edge green" d="M270 308 L236 380" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text class="edgelabel" x="150" y="374">reactive WS</text>
+  <path class="edge" d="M970 308 L800 380" marker-end="url(#arrow)"/>
+  <text class="edgelabel" x="905" y="352">webhooks</text>
+  <path class="edge" d="M1180 411 L1120 411 M1180 411 C1215 411 1215 786 1195 786" marker-end="url(#arrow)"/>
+  <text class="edgelabel" x="1150" y="640">calls</text>
+</svg>

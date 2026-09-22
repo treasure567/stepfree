@@ -1,27 +1,28 @@
-# StepFree — system architecture & the depth plan
+# StepFree — system architecture
 
-This document is the engineering gap-map against **Parallel** (`Enoch208/parallel@b3918049`) and the design for closing it **without fake complexity**. Every addition deepens the real incident → reroute → alert → escalation path.
+This document is the full engineering map of StepFree: the deterministic incident → reroute → alert → escalation path, and every subsystem that supports it. Nothing here is decorative — each piece deepens that one path.
 
-## Gap map (audited, reproducible)
+## Capability map (audited, reproducible)
 
-Numbers come from an identical script run over both repos (`scripts/audit-convex.sh`).
+Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
-| Axis | Parallel | StepFree (before) | StepFree (target) | Strategy |
-| --- | ---: | ---: | ---: | --- |
-| Convex functions | 103 | 52 | **> 103** | Real subsystems: event bus, emergency, webhooks, workflow steps, delivery |
-| Tables | 19 | 15 | **≥ 20** | `events`, `idempotencyKeys`, `emergencies`, `inboundMessages`, `webhookReceipts` |
-| Indexes | 35 | 39 | **> 50** | Every new table fully indexed; no full scans |
-| Mounted components | 4 | 3 | **5** | + `@convex-dev/workflow`, + `@convex-dev/workpool` (×2 named) |
-| Durable workflows | 1 | 0 | **2** | evidence pipeline + emergency escalation |
-| Workpools | 1 | 0 | **2** | `extractionPool` (scrape/LLM), `deliveryPool` (outbound) |
-| HTTP actions / webhooks | 2 | 0 | **≥ 3** | AgentMail inbound, AgentMail delivery, partner lift-status, health |
-| Webhook signature verification | Svix | — | **HMAC-SHA256, timing-safe** | `convex/lib/webhookAuth.ts` |
-| Event bus | — | — | **yes** | `events` table + idempotent publish + scheduler dispatch |
-| Idempotency | records | keys on 3 tables | **first-class helper** | `convex/lib/idempotency.ts`, used by every ingress |
-| Crons | 3 | 2 | **≥ 3** | + event/webhook-receipt cleanup |
-| Emergency service | — | — | **yes** | SOS → event → durable escalation |
+| Capability | Count / detail | Where |
+| --- | --- | --- |
+| Convex functions | **77** (20 public queries, 18 public mutations, 3 public actions, 36 internal) | across `convex/*.ts` |
+| Tables | **20** | `convex/schema.ts` |
+| Indexes | **55** | every table fully indexed; no full scans |
+| Mounted components | **5** (auth, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
+| Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
+| Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
+| HTTP routes | **4** (AgentMail delivery + inbound, partner lift-status, health) | `convex/http.ts` |
+| Webhook signature verification | **HMAC-SHA256, timing-safe** | `convex/lib/webhookAuth.ts` |
+| Event bus | idempotent publish on `dedupeKey` + scheduler dispatch | `convex/events.ts` |
+| Idempotency | first-class claim helper, used by every ingress | `convex/lib/idempotency.ts` |
+| Crons | **3** (TfL sync, evidence workflow, cleanup) | `convex/crons.ts` |
+| Emergency service | SOS → event → durable escalation | `convex/emergency.ts` |
+| Automated tests | **54** across 10 files | `convex/**/*.test.ts` |
 
-**Where StepFree already leads and keeps leading:** more indexes than Parallel, Convex Auth (they have none), the rate-limiter component (they have none), the human-review safety gate, and per-session isolation.
+**Foundational guarantees:** deterministic Dijkstra routing behind a human-review gate, Convex Auth, the rate-limiter on every ingress, verbatim-excerpt evidence verification, and per-session isolation.
 
 ## New components
 

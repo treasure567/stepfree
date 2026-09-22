@@ -69,6 +69,8 @@ Built for the Convex **All Gas** hackathon on **Convex + Firecrawl + OpenAI + Ag
 ## Contents
 
 - [What StepFree does](#what-stepfree-does)
+- [By the numbers](#by-the-numbers)
+- [Features](#features)
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
 - [System design in depth](#system-design-in-depth)
@@ -85,7 +87,7 @@ Built for the Convex **All Gas** hackathon on **Convex + Firecrawl + OpenAI + Ag
 - [Testing](#testing)
 - [Security](#security)
 - [Known limitations](#known-limitations)
-- [System-design boards](#system-design-boards-excalidraw)
+- [System-design diagrams](#system-design-diagrams)
 - [Links](#links)
 - [License & attributions](#license--attributions)
 
@@ -101,7 +103,43 @@ It rests on one boundary:
 
 The model reads scraped pages and extracts candidates. It never chooses a path, never decides whether a station is blocked, and never emails anyone on its own. Those are deterministic TypeScript and a human reviewer.
 
+## By the numbers
+
+Reproducible with [`scripts/audit-convex.sh`](scripts/audit-convex.sh).
+
+| | Count | Detail |
+| --- | ---: | --- |
+| **Convex functions** | **77** | 20 public queries · 18 public mutations · 3 public actions · 3 internal queries · 27 internal mutations · 6 internal actions |
+| **Tables** | **20** | fully indexed; no unbounded scans |
+| **Indexes** | **55** | every query is index-backed |
+| **Mounted components** | **5** | auth · rate-limiter · static-hosting · workflow · workpool (×2 named instances) |
+| **Durable workflows** | **2** | evidence pipeline · emergency escalation |
+| **Workpools** | **2** | `extractionPool` (scrape/LLM) · `deliveryPool` (outbound) |
+| **HTTP routes** | **4** | AgentMail delivery · AgentMail inbound · partner lift-status · health |
+| **Cron jobs** | **3** | TfL sync (5 min) · evidence workflow (6 h) · idempotency cleanup (12 h) |
+| **Named rate limits** | **17** | per-session and global buckets on every ingress |
+| **Scheduler hand-offs** | **4** | provider I/O and dispatch run off the write path |
+| **Automated tests** | **54** | across 10 files (Vitest + `convex-test`) |
+| **External services** | **4** | Firecrawl · OpenAI · AgentMail · TfL Unified API |
+
+## Features
+
+- **Live, no-refresh reroute** — break a lift, watch the route re-solve from 31 → 36 minutes on a MapLibre map with an optional immersive 3-D wheelchair simulation.
+- **Deterministic Dijkstra routing** behind a strict **human-review gate** — no LLM in the safety decision.
+- **Verbatim-excerpt evidence verification** — a model claim only counts if the quote exists character-for-character in the scraped page (SHA-256 provenance on every record).
+- **Durable evidence workflow** — scrape → extract → verify → persist, resumable and retryable.
+- **Decoupled, idempotent alert pipeline** — station fan-out index, per-watch budget, `queued → sending → sent → delivered/bounced/failed` state machine.
+- **Signed webhooks (HMAC-SHA256, timing-safe)** — AgentMail delivery advances the alert state machine; AgentMail inbound parses replies and can pause a watch; a partner lift-status feed lands advisory reports.
+- **Event bus** — idempotent publish + scheduler dispatch decouples producers from consumers.
+- **Emergency SOS service** — rate-limited, idempotent, and durably escalated if no one acknowledges in time.
+- **First-class idempotency** — a shared claim helper guards every ingress (webhooks, SOS, alerts, email codes).
+- **Session isolation** — one visitor's `/proof` drill never touches another's view or global state.
+- **Convex Auth** (password + username), **peppered OTP** email verification, and the **rate-limiter** on every entry point.
+- **Installable PWA**, static-exported and served from `convex.site`.
+
 ## How it works
+
+![StepFree data flow and safety boundary](docs/diagrams/stepfree-dataflow.svg)
 
 ```mermaid
 flowchart LR
@@ -131,6 +169,8 @@ flowchart LR
 7. **AgentMail** emails the traveller the new route and the added time, before they reach the barrier.
 
 ## Architecture
+
+![StepFree system architecture](docs/diagrams/stepfree-architecture.svg)
 
 The whole product is one Convex deployment. The static-exported Next.js app is served from `convex.site`, every screen subscribes to reactive queries, and the router runs inside the query that reads the plan — so the route and the incident state it was computed from are always consistent.
 
@@ -393,9 +433,24 @@ Open **https://whimsical-ferret-778.convex.site/proof** (no login). Every button
 
 ## Tech stack
 
-- **Frontend:** Next.js 16 (static export), React 19, TypeScript, `maplibre-gl` (MapLibre + OpenStreetMap tiles), installable PWA.
-- **Backend:** Convex — schema, queries/mutations/actions, internal functions, scheduler, crons, HTTP router, Convex Auth, `@convex-dev/rate-limiter`, `@convex-dev/static-hosting`.
-- **External services:** Firecrawl (official-page scrape), OpenAI `gpt-5.4-mini` (Responses API, structured JSON), AgentMail (email delivery), TfL Unified API (live lift disruptions), Valhalla (wheelchair street routing).
+- **Frontend:** Next.js 16 (static export), React 19, TypeScript, `maplibre-gl` (MapLibre + OpenStreetMap tiles), `lucide-react`, Tailwind CSS, installable PWA.
+- **Backend:** Convex — schema, queries/mutations/actions, internal functions, scheduler, crons, HTTP router.
+- **External services:** Firecrawl (official-page scrape), OpenAI `gpt-5.4-mini` (Responses API, structured JSON), AgentMail (email delivery + inbound webhooks), TfL Unified API (live lift disruptions), Valhalla (wheelchair street routing).
+
+### Packages
+
+| Package | Role |
+| --- | --- |
+| `convex` | Database, reactive queries, functions, scheduler, crons, HTTP router |
+| `@convex-dev/auth` | Password + username authentication and the reviewer boundary |
+| `@convex-dev/rate-limiter` | 17 named per-session / global rate limits on every ingress |
+| `@convex-dev/static-hosting` | Serves the static-exported Next.js app from `convex.site` |
+| `@convex-dev/workflow` | Durable, resumable evidence + escalation workflows |
+| `@convex-dev/workpool` | Bounded concurrency pools (extraction + delivery) |
+| `next` · `react` · `react-dom` | Static-exported PWA frontend |
+| `maplibre-gl` · `lucide-react` · `tailwindcss` | Map, icons, styling |
+| `vitest` · `convex-test` · `@edge-runtime/vm` | 54 backend tests |
+| `typescript` · `eslint` · `eslint-config-next` | Types and linting |
 
 ## Project layout
 
@@ -464,12 +519,14 @@ pnpm build
 - **AgentMail send currently returns HTTP 403** because the provided API key needs `message_send` permission / account verification. The full alert pipeline — queue, idempotency, per-watch budget, and status machine — is built and verified end-to-end **except the final provider call**; delivery resumes the moment the key can send. Account-verification code delivery uses the same provider and the same limitation applies.
 - Street routing uses a **public Valhalla instance** (10 m – 25 km per request) and public OSM tiles — fine for a demo, not a launch.
 
-## System-design boards (Excalidraw)
+## System-design diagrams
 
-The Mermaid diagrams above render inline on GitHub. The same system design also lives as **editable Excalidraw whiteboards** you can open, pan and share at [excalidraw.com](https://excalidraw.com) (File → Open):
+Two standalone vector diagrams (rendered inline above, and crisp at any zoom):
 
-- [`docs/diagrams/stepfree-architecture.excalidraw`](docs/diagrams/stepfree-architecture.excalidraw) — the deployment and provider topology
-- [`docs/diagrams/stepfree-flows.excalidraw`](docs/diagrams/stepfree-flows.excalidraw) — the evidence, review and alert flows
+- [`docs/diagrams/stepfree-architecture.svg`](docs/diagrams/stepfree-architecture.svg) — clients, edge, the Convex deployment (queries · mutations · actions · scheduler · crons · event bus · workflows · workpools · database) and the four external services
+- [`docs/diagrams/stepfree-dataflow.svg`](docs/diagrams/stepfree-dataflow.svg) — the evidence truth boundary, the decoupled alert pipeline and the emergency escalation
+
+Plus the inline Mermaid diagrams throughout this README: the reactive client⇄server round-trip, the caching/freshness stack, session isolation, the safety gate, the alert state machine and the data-model ER diagram. See [`docs/architecture.md`](docs/architecture.md) for the full capability map.
 
 ## Links
 
@@ -478,7 +535,7 @@ The Mermaid diagrams above render inline on GitHub. The same system design also 
 - **Repo:** https://github.com/treasure567/stepfree
 - **Video:** <!-- VIDEO_URL -->
 - **Build log:** [`hackathon.md`](hackathon.md)
-- **Competitive analysis:** [`docs/comparison.md`](docs/comparison.md)
+- **System architecture:** [`docs/architecture.md`](docs/architecture.md)
 - **Demo video script:** [`docs/video-script.md`](docs/video-script.md)
 
 ## License & attributions

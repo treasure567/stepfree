@@ -26,7 +26,7 @@ When a station lift goes down, StepFree reroutes around it and sends the fix ahe
 In the demo: 31 min via Bond Street → 36 via London Bridge. +5 minutes, 0 stairs — updated live, no refresh.
 
 **3/**
-The @convex "All Gas" field is strong. Parallel helps a team catch more talks; StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there.
+The @convex "All Gas" field is strong. StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there.
 
 Proactive, not reactive. That's the whole point.
 
@@ -55,7 +55,7 @@ StepFree watches live lift-status data, and the moment a station becomes impassa
 
 We built it this weekend for the Convex "All Gas" hackathon on Convex, Firecrawl, OpenAI and AgentMail. The principle we cared most about: **AI understands, code decides.** OpenAI reads the live status and must quote the exact source line; StepFree verifies that quote against the page it scraped before trusting it. Then a deterministic routing algorithm — not the model — chooses the path. Nothing reroutes a real person on a hunch.
 
-There are brilliant projects in this hackathon. Parallel helps a conference team catch more of the talks that matter. StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there. Both matter. Ours just happens to be the difference between a journey and a dead end.
+There are brilliant projects in this hackathon. StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there. For our travellers, that's the difference between a journey and a dead end.
 
 Step-free should be the default, not a scramble.
 

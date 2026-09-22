@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 720" font-family="'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b6b66"/>
+    </marker>
+    <style>
+      .b { fill:#ffffff; stroke:#20302b; stroke-width:1.5; }
+      .prov { fill:#fdece6; stroke:#c0603f; stroke-width:1.5; }
+      .gate { fill:#fbf3d8; stroke:#b8912a; stroke-width:1.5; }
+      .core { fill:#f2f8ec; stroke:#3f7d34; stroke-width:1.5; }
+      .del { fill:#e8f0fb; stroke:#2f6bd0; stroke-width:1.5; }
+      .t { fill:#16211d; font-size:14px; font-weight:700; text-anchor:middle; }
+      .s { fill:#5b6b66; font-size:11px; text-anchor:middle; }
+      .sec { fill:#8a938f; font-size:12px; font-weight:700; letter-spacing:1.5px; }
+      .e { stroke:#5b6b66; stroke-width:1.6; fill:none; }
+      .el { fill:#5b6b66; font-size:10.5px; text-anchor:middle; }
+    </style>
+  </defs>
+  <rect width="1240" height="720" fill="#f6f5f1"/>
+  <text x="40" y="44" fill="#16211d" font-size="24" font-weight="800">StepFree — data flow &amp; the safety boundary</text>
+  <text x="40" y="68" fill="#5b6b66" font-size="13">AI understands the notice. Deterministic code — behind a human gate — decides the route.</text>
+
+  <!-- Row A: evidence truth boundary -->
+  <text class="sec" x="40" y="104">1 · EVIDENCE TRUTH BOUNDARY</text>
+  <g>
+    <rect class="prov b" x="40" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="128" y="152">Firecrawl</text><text class="s" x="128" y="170">scrape official</text><text class="s" x="128" y="185">TfL page (6h)</text>
+    <rect class="prov b" x="237" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="325" y="152">OpenAI</text><text class="s" x="325" y="170">extract candidate</text><text class="s" x="325" y="185">+ verbatim excerpt</text>
+    <rect class="gate" x="434" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="522" y="152">Verify excerpt</text><text class="s" x="522" y="170">must exist</text><text class="s" x="522" y="185">character-for-character</text>
+    <rect class="gate" x="631" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="719" y="152">Human review</text><text class="s" x="719" y="170">accept · station resolved</text><text class="s" x="719" y="185">confidence ≥ 0.7</text>
+    <rect class="core" x="828" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="916" y="152">Reviewed incident</text><text class="s" x="916" y="170">humanReviewed</text><text class="s" x="916" y="185">= true</text>
+    <rect class="core" x="1025" y="120" width="176" height="80" rx="12"/>
+    <text class="t" x="1113" y="148">Dijkstra reroute</text><text class="s" x="1113" y="166">31 → 36 min</text><text class="s" x="1113" y="181">live · no refresh</text>
+  </g>
+  <path class="e" d="M216 160 L237 160" marker-end="url(#a2)"/>
+  <path class="e" d="M413 160 L434 160" marker-end="url(#a2)"/>
+  <path class="e" d="M610 160 L631 160" marker-end="url(#a2)"/>
+  <path class="e" d="M807 160 L828 160" marker-end="url(#a2)"/>
+  <path class="e" d="M1004 160 L1025 160" marker-end="url(#a2)"/>
+  <!-- rejected branch -->
+  <rect class="b" x="434" y="250" width="373" height="56" rx="12" stroke-dasharray="5 4"/>
+  <text class="t" x="620" y="274">Refused · stays pending</text>
+  <text class="s" x="620" y="292">forged excerpt · unresolved station · low confidence — never reroutes</text>
+  <path class="e" d="M522 200 L522 250" marker-end="url(#a2)" stroke-dasharray="5 4"/>
+  <path class="e" d="M719 200 L719 250" marker-end="url(#a2)" stroke-dasharray="5 4"/>
+
+  <!-- Row B: alert pipeline -->
+  <text class="sec" x="40" y="366">2 · ALERT PIPELINE · decoupled, idempotent</text>
+  <g>
+    <rect class="core" x="40" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="128" y="412">Route change</text><text class="s" x="128" y="430">fingerprint differs</text>
+    <rect class="b" x="237" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="325" y="412">Fan-out</text><text class="s" x="325" y="430">watchStations index</text>
+    <rect class="gate" x="434" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="522" y="412">Enqueue</text><text class="s" x="522" y="430">idempotent · per-watch budget</text>
+    <rect class="del" x="631" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="719" y="412">deliveryPool</text><text class="s" x="719" y="430">bounded concurrency</text>
+    <rect class="prov b" x="828" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="916" y="412">AgentMail</text><text class="s" x="916" y="430">send · provider id</text>
+    <rect class="del" x="1025" y="382" width="176" height="76" rx="12"/>
+    <text class="t" x="1113" y="405">Delivery webhook</text><text class="s" x="1113" y="423">HMAC-verified →</text><text class="s" x="1113" y="438">sent·delivered·bounced</text>
+  </g>
+  <path class="e" d="M216 420 L237 420" marker-end="url(#a2)"/>
+  <path class="e" d="M413 420 L434 420" marker-end="url(#a2)"/>
+  <path class="e" d="M610 420 L631 420" marker-end="url(#a2)"/>
+  <path class="e" d="M807 420 L828 420" marker-end="url(#a2)"/>
+  <path class="e" d="M1004 420 L1025 420" marker-end="url(#a2)"/>
+
+  <!-- Row C: emergency -->
+  <text class="sec" x="40" y="524">3 · EMERGENCY SERVICE · durable escalation</text>
+  <g>
+    <rect class="b" x="40" y="540" width="220" height="76" rx="12"/>
+    <text class="t" x="150" y="570">SOS raised</text><text class="s" x="150" y="588">rate-limited · idempotent</text>
+    <rect class="core" x="330" y="540" width="220" height="76" rx="12"/>
+    <text class="t" x="440" y="570">Event bus</text><text class="s" x="440" y="588">emergency.raised · dispatch</text>
+    <rect class="b" x="620" y="540" width="260" height="76" rx="12"/>
+    <text class="t" x="750" y="570">Escalation workflow</text><text class="s" x="750" y="588">step.sleep(window) · durable</text>
+    <rect class="del" x="950" y="540" width="250" height="76" rx="12"/>
+    <text class="t" x="1075" y="570">Escalate if unacknowledged</text><text class="s" x="1075" y="588">notify via deliveryPool</text>
+  </g>
+  <path class="e" d="M260 578 L330 578" marker-end="url(#a2)"/>
+  <path class="e" d="M550 578 L620 578" marker-end="url(#a2)"/>
+  <path class="e" d="M880 578 L950 578" marker-end="url(#a2)"/>
+</svg>
