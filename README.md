@@ -11,7 +11,8 @@ For the product story, production evidence, architecture diagrams, sponsor integ
 - [Street navigator](https://whimsical-ferret-778.convex.site/navigate)
 - [Operations console](https://whimsical-ferret-778.convex.site/ops)
 - [Demo video (3-min walkthrough)](https://youtu.be/Iisonc0n-go)
-- [Launch post](https://x.com/naheem__x/status/2102456491831673126)
+- [Launch post — X](https://x.com/naheem__x/status/2102461424484176217)
+- [Launch post — LinkedIn](https://lnkd.in/p/dC6eBGzt)
 
 ## Current system snapshot
 

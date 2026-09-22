@@ -7,7 +7,8 @@
 - 🛠️ Operations console (demo login pre-filled): https://whimsical-ferret-778.convex.site/ops
 - 💻 Repo: https://github.com/treasure567/stepfree
 - 🎬 3-min demo: https://youtu.be/Iisonc0n-go
-- 🐦 Launch post: https://x.com/naheem__x/status/2102456491831673126
+- 🐦 Launch post (X): https://x.com/naheem__x/status/2102461424484176217
+- 💼 Launch post (LinkedIn): https://lnkd.in/p/dC6eBGzt
 
 ---
 
