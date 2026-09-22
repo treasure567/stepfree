@@ -54,6 +54,14 @@ Before recording, reset the drill and test the full path once. AgentMail deliver
 
 **Alternate voice if a send fails on the day:** "The application queues and deduplicates the alert, but this delivery failed at the provider. The product shows that failure and lets us requeue, instead of inventing a delivery."
 
+## Optional bonus (~15s), the operations console and the two-way loop
+
+Include this only if you can stay under 3:00. It is the strongest technical proof.
+
+**Screen:** Open `/ops`. Show the Activity log with provider pills (Firecrawl, OpenAI, TfL, AgentMail), click the **AgentMail** filter, then open **Inbox** and show the parsed reply tagged "arrived".
+
+**Voice:** "Every action is logged with the provider that performed it. And the loop closes both ways — a traveller's reply comes back through an AgentMail webhook, is verified and parsed to an intent, with no polling."
+
 ## 2:34 to 2:50, close on the result
 
 **Screen:** Return to the 31 to 36 route result. End with the live URL and repository.

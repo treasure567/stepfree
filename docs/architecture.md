@@ -81,7 +81,7 @@ flowchart LR
 
 ## Webhook ingress status
 
-The partner lift-status endpoint verifies a timing-safe HMAC-SHA256 signature, deduplicates the provider event ID, and reduces the request to an internal mutation. AgentMail posts to a single unified endpoint (`/webhooks/agentmail`) that verifies Svix signatures — `svix-id`, `svix-timestamp` and `svix-signature`, base64 HMAC-SHA256 over `id.timestamp.body` with a replay-tolerance window — then routes by event type: `message.received` to the inbound handler, `message.delivered`/`bounced` to the delivery handler, and every other type to a telemetry receipt. Enabling live traffic only needs the AgentMail signing secret set as `AGENTMAIL_WEBHOOK_SECRET`.
+The partner lift-status endpoint verifies a timing-safe HMAC-SHA256 signature, deduplicates the provider event ID, and reduces the request to an internal mutation. AgentMail posts to a single production endpoint (`/webhooks/agentmail`) that verifies Svix signatures using `svix-id`, `svix-timestamp`, and `svix-signature`, base64 HMAC-SHA256 over `id.timestamp.body`, and a replay-tolerance window. It routes `message.received` to the inbound handler, `message.delivered` and `message.bounced` to the delivery handler, and every other event type to a telemetry receipt.
 
 ```mermaid
 sequenceDiagram
@@ -106,7 +106,7 @@ sequenceDiagram
     end
 ```
 
-The delivery handler advances an alert to `delivered` or `bounced` by `providerMessageId`. The Svix verifier is covered by local tests; live production traffic starts once the AgentMail signing secret is configured.
+The delivery handler advances an alert to `delivered` or `bounced` by `providerMessageId`. Inbound and delivery events are live in production through the same endpoint. Five focused verifier tests cover valid signatures, rotated signature sets, tampered payloads, stale timestamps, and missing headers or secrets.
 
 ## Emergency service (SOS)
 

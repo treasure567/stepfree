@@ -78,7 +78,7 @@ The rule behind the product is deliberate: AI reads the notice. It does not decl
 
 Firecrawl fetches the official source. OpenAI extracts structured incident data and must return the exact sentence it used. StepFree checks that quote against the source. A human accepts the incident. Deterministic graph search chooses the route.
 
-The current build has 22 Convex tables, 57 indexes, 2 durable workflows, 2 bounded workpools, 4 crons, an operations console, a session-isolated judge drill, a shareable reroute receipt, and 100 automated tests. Those numbers are engineering evidence. The product is the five-minute detour that prevents a dead end.
+The current build has 23 Convex tables, 61 indexes, 2 durable workflows, 2 bounded workpools, 4 crons, an operations console, a session-isolated judge drill, a shareable reroute receipt, and 107 automated tests. Those numbers are engineering evidence. The product is the five-minute detour that prevents a dead end.
 
 Try it without an account:
 
