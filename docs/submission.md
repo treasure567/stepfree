@@ -83,7 +83,7 @@ By the numbers:
 | Tables · Indexes | **23** · **61** |
 | Mounted Convex components | **8** |
 | Durable workflows · Workpools · Crons | **2** · **2** · **4** |
-| Automated tests | **107** across **22** files, green in CI |
+| Automated tests | **109** across **23** files, green in CI (incl. property-style routing tests) |
 | Reliability guards proven | **6 / 6** |
 
 **Honest limits:** a curated 9-station London pilot (not the full TfL graph); the live TfL feed is real context while the demo incident is a labelled drill; AgentMail sends over SMTP because the key lacks the REST send scope; street routing uses a public Valhalla instance. We'd rather ship what's true than claim what isn't.

@@ -133,7 +133,7 @@ The application currently contains:
 | Deferred work | **8 scheduler hand-offs** |
 | Rate controls | **17 named limits** |
 | HTTP ingress | **3 explicit routes**: health, unified AgentMail webhook, and partner lift status, plus auth and static routes |
-| Automated verification | **107 passing tests across 22 files**, plus `scripts/audit-convex.sh` |
+| Automated verification | **109 passing tests across 23 files (including property-style routing tests)**, plus `scripts/audit-convex.sh` |
 
 ### Mounted components
 

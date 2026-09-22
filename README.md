@@ -26,7 +26,7 @@ For the product story, production evidence, architecture diagrams, sponsor integ
 | Durable workflows | 2 |
 | Bounded workpools | 2 |
 | Cron jobs | 4 |
-| Automated tests | 107 across 22 files |
+| Automated tests | 109 across 23 files |
 
 ## Requirements
 
@@ -174,7 +174,7 @@ pnpm build
 bash scripts/audit-convex.sh
 ```
 
-The current suite contains 107 passing tests across 22 files.
+The current suite contains 109 passing tests across 23 files, including property-style routing tests over all station pairs.
 
 The CI workflow runs a frozen install, lint, tests, and the production build on pushes and pull requests.
 
