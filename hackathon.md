@@ -16,7 +16,7 @@ StepFree is a live accessibility layer for public transit. It watches official a
 - **Operations console:** [whimsical-ferret-778.convex.site/ops](https://whimsical-ferret-778.convex.site/ops)
 - **Source:** [github.com/treasure567/stepfree](https://github.com/treasure567/stepfree)
 - **Demo video (3-min walkthrough):** [youtu.be/Iisonc0n-go](https://youtu.be/Iisonc0n-go)
-- **Launch post:** [X / Twitter](https://x.com/naheem__x/status/2102461424484176217) · [LinkedIn](https://lnkd.in/p/dC6eBGzt)
+- **Launch post:** [X / Twitter](https://x.com/naheem__x/status/2102461424484176217) · [LinkedIn](https://lnkd.in/p/eN_-gPKY)
 
 ## At a glance, for judging
 
@@ -326,7 +326,7 @@ The 23 tables are grouped by responsibility.
 ### Shipped for submission
 
 - The three-minute demo walkthrough is published: [youtu.be/Iisonc0n-go](https://youtu.be/Iisonc0n-go).
-- The launch post is live on [X](https://x.com/naheem__x/status/2102461424484176217) and [LinkedIn](https://lnkd.in/p/dC6eBGzt).
+- The launch post is live on [X](https://x.com/naheem__x/status/2102461424484176217) and [LinkedIn](https://lnkd.in/p/eN_-gPKY).
 - Confirm the repository is public before final submission so judges can open the source.
 
 ## Build log

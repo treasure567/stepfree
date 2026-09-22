@@ -8,7 +8,7 @@
 - 💻 Repo: https://github.com/treasure567/stepfree
 - 🎬 3-min demo: https://youtu.be/Iisonc0n-go
 - 🐦 Launch post (X): https://x.com/naheem__x/status/2102461424484176217
-- 💼 Launch post (LinkedIn): https://lnkd.in/p/dC6eBGzt
+- 💼 Launch post (LinkedIn): https://lnkd.in/p/eN_-gPKY
 
 ---
 

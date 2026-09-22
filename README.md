@@ -12,7 +12,7 @@ For the product story, production evidence, architecture diagrams, sponsor integ
 - [Operations console](https://whimsical-ferret-778.convex.site/ops)
 - [Demo video (3-min walkthrough)](https://youtu.be/Iisonc0n-go)
 - [Launch post — X](https://x.com/naheem__x/status/2102461424484176217)
-- [Launch post — LinkedIn](https://lnkd.in/p/dC6eBGzt)
+- [Launch post — LinkedIn](https://lnkd.in/p/eN_-gPKY)
 
 ## Current system snapshot
 
