@@ -64,19 +64,63 @@ Built for the Convex **All Gas** hackathon on **Convex + Firecrawl + OpenAI + Ag
 - **Repo:** https://github.com/treasure567/stepfree
 - **Video:** <!-- VIDEO_URL -->
 
-## The safety boundary — read this first
+---
+
+## Contents
+
+- [What StepFree does](#what-stepfree-does)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [System design in depth](#system-design-in-depth)
+- [The safety boundary](#the-safety-boundary--read-this-first)
+- [The alert pipeline](#the-alert-pipeline)
+- [Where each sponsor fits](#where-each-sponsor-fits)
+- [Convex components](#convex-components)
+- [Convex depth](#convex-depth)
+- [Data model](#data-model)
+- [The `/proof` judge page](#the-proof-judge-page--what-to-click)
+- [Tech stack](#tech-stack)
+- [Project layout](#project-layout)
+- [Running it yourself](#running-it-yourself)
+- [Testing](#testing)
+- [Security](#security)
+- [Known limitations](#known-limitations)
+- [System-design boards](#system-design-boards-excalidraw)
+- [Links](#links)
+- [License & attributions](#license--attributions)
+
+---
+
+## What StepFree does
+
+StepFree watches official access notices and live lift feeds, turns what changed into **verified, human-reviewed evidence**, and reroutes a step-free journey around the failure — then warns the traveller by email before they reach the barrier. It optimizes for the one thing conventional planners ignore: **the timing gap** between a lift failing and a traveller arriving at it.
+
+It rests on one boundary:
 
 > **AI can read the notice. It cannot declare a route safe.**
 
-A wrong reroute strands a real person, so the accessibility decision is never left to a language model.
-
-- **Routing is deterministic.** A Dijkstra shortest-path engine over an accessible station graph computes every route (`convex/lib/transit.ts`). No LLM is ever in the routing decision.
-- **A route blocks only on human-reviewed evidence.** An incident removes a station from routing only when its severity is `route-blocking` **and** `humanReviewed === true`. That flag is set only by an authenticated reviewer (`convex/review.ts`) or carried by the controlled drill inside its own session.
-- **The official TfL live feed is advisory-only.** Real lift disruptions sync every 5 minutes and appear as context, but they carry no `humanReviewed` flag, so they never block a route until a human accepts them.
-- **Invented evidence is refused.** Every candidate must carry a short source excerpt that exists _verbatim_ in the scraped page. A fabricated excerpt fails verification and no incident is created (`convex/lib/excerpt.ts`).
-- **Low-confidence and unknown-station candidates stay pending.** Acceptance requires a verified excerpt, a resolved station, and confidence ≥ 0.7 (`convex/review.ts`).
+The model reads scraped pages and extracts candidates. It never chooses a path, never decides whether a station is blocked, and never emails anyone on its own. Those are deterministic TypeScript and a human reviewer.
 
 ## How it works
+
+```mermaid
+flowchart LR
+    T["Traveller plans<br/>step-free journey"] --> RT["Deterministic router<br/>Dijkstra over the<br/>accessible station graph"]
+
+    subgraph Intake["Evidence intake · every 6h cron"]
+      FC["Firecrawl<br/>scrape TfL works page"] --> AI["OpenAI gpt-5.4-mini<br/>candidate + verbatim excerpt"]
+      AI --> V["Verify excerpt<br/>character-for-character"]
+      V --> P["Pending candidate<br/>URL · time · SHA-256 · model"]
+    end
+
+    P --> H{"Human reviewer<br/>accepts?"}
+    H -- "no" --> P
+    H -- "yes · conf ≥ 0.7" --> INC["Routing incident<br/>humanReviewed = true"]
+    INC --> RT
+    RT -- "lift down → re-solve" --> RR["Reroute<br/>31 → 36 min via London Bridge"]
+    RR --> LIVE["Live query<br/>map updates, no refresh"]
+    RR --> AM["AgentMail<br/>alert before the barrier"]
+```
 
 1. A traveller plans a step-free journey (demo: **Waterloo → Barbican, 31 min via Bond Street**).
 2. **Firecrawl** scrapes the official TfL _stations, lifts and escalators works and closures_ page to clean markdown, on a 6-hour cron.
@@ -86,43 +130,253 @@ A wrong reroute strands a real person, so the accessibility decision is never le
 6. **Convex** holds all state and serves reactive live queries. The instant Bond Street is blocked, the route re-solves to **London Bridge (36 min, +5 min)** — live, no page refresh, no polling.
 7. **AgentMail** emails the traveller the new route and the added time, before they reach the barrier.
 
-## How each sponsor does real work
+## Architecture
 
-- **Firecrawl — the source of truth.** `POST /v2/scrape` on one fixed TfL page returns `onlyMainContent` markdown with a 6-hour `maxAge`. The URL is hard-coded (users cannot supply one), which also makes it SSRF-safe.
-- **OpenAI — structured extraction, never decisions.** The Responses API (`/v1/responses`) runs `gpt-5.4-mini` with a `strict` `json_schema` and `store: false`. It is instructed not to infer missing facts and to return an exact source excerpt per candidate. Its output is candidates for review — never a route.
-- **Convex — the backbone (see _Convex depth_).** Every piece of state, the reactive reroute, the scheduler, the crons, auth, rate limiting, and the static site all live in Convex.
-- **AgentMail — last-mile delivery.** Sends account verification codes today, and route alerts through an idempotent queue with a stored provider message ID and a delivery status machine.
+The whole product is one Convex deployment. The static-exported Next.js app is served from `convex.site`, every screen subscribes to reactive queries, and the router runs inside the query that reads the plan — so the route and the incident state it was computed from are always consistent.
 
-## Notable features
+```mermaid
+flowchart TB
+    subgraph People
+      Trav["Traveller<br/>browser · installable PWA"]
+      Rev["Reviewer<br/>authenticated"]
+    end
 
-- **Deterministic routing behind a human-reviewed gate** — the safety boundary above, enforced in code.
-- **Freshness and provenance** — every incident and candidate stores the source URL, fetch time, **SHA-256 content hash**, model name, and the verbatim excerpt. The `/proof` page shows all of it.
-- **Idempotent alert pipeline** — route changes fan out to affected watches, dedupe on a unique key per watch + route change, respect a per-watch alert budget (so a flapping lift can't spam), and move through a `queued → sending → sent → delivered/bounced/failed` state machine. Duplicate incident events collapse to one email.
-- **Session isolation** — a per-session `demoIncidents` overlay means one judge's drill never touches another judge's view or global state.
-- **Warn before the barrier** — the alert exists to arrive while the traveller can still act.
+    subgraph Convex["Convex deployment · one backend"]
+      Site["Static hosting<br/>Next.js 16 export"]
+      Q["Reactive queries<br/>route · evidence · alerts"]
+      M["Mutations<br/>routing gate + state machine"]
+      Act["Actions<br/>provider calls, off the write path"]
+      Sched["Scheduler<br/>deliverAlert"]
+      Cron["Crons<br/>TfL 5 min · evidence 6 h"]
+      Http["HTTP router<br/>/auth + static catch-all"]
+      DB[("Database<br/>15 tables")]
+    end
+
+    subgraph Providers
+      FC["Firecrawl"]
+      OA["OpenAI"]
+      AM["AgentMail"]
+      TFL["TfL Unified API"]
+    end
+
+    Trav --> Site
+    Rev --> Site
+    Site <--> Q
+    Site --> M
+    Q --> DB
+    M --> DB
+    M --> Sched
+    Sched --> Act
+    Cron --> Act
+    Act --> FC
+    Act --> OA
+    Act --> AM
+    Act --> TFL
+    Act --> M
+    AM -- "reroute alert" --> Trav
+```
+
+**Mutations never make network calls.** Everything that talks to Firecrawl, OpenAI, AgentMail or TfL is an action, and actions change state only by calling mutations — so every write is a transaction that re-checks its own rules (including the safety gate below).
+
+## System design in depth
+
+### Client ⇄ server: the no-refresh reroute
+
+The browser opens **one WebSocket** to Convex and subscribes to the plan query — it never polls. When any data that query read changes (an incident is accepted, a lift is restored), Convex re-runs just that query and **pushes** the new result to every subscribed client. That is how the `/proof` map redraws from 31 → 36 minutes with no refresh.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (React)
+    participant WS as Convex sync (WebSocket)
+    participant Q as plan() query
+    participant M as accept() mutation
+    participant DB as Database
+
+    B->>WS: subscribe plan(from, to, session)
+    WS->>Q: run
+    Q->>DB: read stations · incidents · demoIncidents
+    Q-->>B: route = 31 min via Bond Street
+
+    Note over M,DB: later — a reviewer accepts an incident
+    M->>DB: write incident (humanReviewed = true)
+    DB-->>Q: dependent queries invalidated
+    Q->>DB: re-run automatically
+    Q-->>B: pushed update = 36 min via London Bridge
+    Note over B: map redraws · no refresh · no polling
+```
+
+### Caching & freshness
+
+StepFree layers caches so the live path stays cheap and the model/scrape budget stays small. Every layer has an explicit key or TTL, and every layer is invalidated by a write rather than by guesswork.
+
+| Layer | Where | Key / TTL | Why |
+| --- | --- | --- | --- |
+| App shell + assets | Service worker (PWA) + `convex.site` static hosting | Content-hashed filenames | Instant loads; the app works offline-first |
+| Map tiles | Browser HTTP cache | OSM tile URL | Avoid refetching raster tiles while panning |
+| Reactive query result | Convex sync engine | Query + args; invalidated on any write it read | The no-refresh live update above |
+| Scrape result | Firecrawl | `maxAge = 6h` on a fixed URL | Don't re-scrape an unchanged page |
+| Extraction runs | `monitoringRuns` | SHA-256 content hash | Skip OpenAI entirely when the scrape is byte-identical |
+| Reroute decision | Route / incident **fingerprints** | Hash of the route + blocking set | A flapping lift that doesn't change the route fires no alert |
+| Live lift feed | `tfl.ts` cron | Every **5 min** | Fresh advisory context without hammering TfL |
+
+```mermaid
+flowchart LR
+    subgraph Client
+      SW["Service worker · PWA<br/>app shell"]
+      Tiles["Browser cache<br/>OSM tiles"]
+      Sub["Live subscription<br/>query result"]
+    end
+    subgraph Edge["convex.site"]
+      CDN["Static hosting<br/>hashed assets"]
+    end
+    subgraph Backend["Convex"]
+      QC["Query cache<br/>invalidated on write"]
+      MR["monitoringRuns<br/>content-hash dedup"]
+      FP["Route fingerprints<br/>skip no-op reroutes"]
+    end
+    subgraph Upstream
+      FCc["Firecrawl<br/>maxAge 6h"]
+      TFLc["TfL sync<br/>every 5 min"]
+    end
+    SW --- CDN
+    Sub --- QC
+    QC --- MR --- FCc
+    QC --- FP
+    QC --- TFLc
+```
+
+### Session-isolated drill lifecycle
+
+The `/proof` drill writes to a **session-scoped** `demoIncidents` overlay, so one judge breaking a lift never changes another judge's map or the global graph. The plan query merges the global (human-reviewed) incidents with only this session's overlay.
+
+```mermaid
+sequenceDiagram
+    participant J as Judge (/proof)
+    participant Mu as simulateOutage(sessionId)
+    participant DB as demoIncidents (session-scoped)
+    participant Pl as plan(from, to, sessionId)
+
+    J->>Mu: Break a lift on this route
+    Mu->>DB: insert demo incident for this session only
+    DB-->>Pl: invalidates this session's plan
+    Pl->>DB: merge global incidents + demoIncidents[session]
+    Pl-->>J: rerouted plan (live, this session only)
+    Note over J,DB: every other visitor's plan is untouched
+```
+
+## The safety boundary — read this first
+
+A wrong reroute strands a real person, so the accessibility decision is **never** left to a language model. This is the gate every incident must pass before it can move anyone:
+
+```mermaid
+flowchart TD
+    S["Incident candidate<br/>(OpenAI extraction or TfL feed)"] --> E{"Excerpt exists<br/>verbatim in the<br/>scraped page?"}
+    E -- "no" --> X["Refused · no incident created"]
+    E -- "yes" --> C{"Station resolved<br/>& confidence ≥ 0.7?"}
+    C -- "no" --> PEND["Stays pending<br/>(cannot reroute)"]
+    C -- "yes" --> R{"Human reviewer<br/>accepts?"}
+    R -- "no" --> PEND
+    R -- "yes" --> B["humanReviewed = true<br/>severity = route-blocking"]
+    B --> RT["Router removes the station<br/>and re-solves the route"]
+    TFL["TfL live feed"] -. "advisory only ·<br/>never humanReviewed" .-> PEND
+```
+
+- **Routing is deterministic.** A Dijkstra shortest-path engine over an accessible station graph computes every route (`convex/lib/transit.ts`). No LLM is ever in the routing decision.
+- **A route blocks only on human-reviewed evidence.** An incident removes a station from routing only when its severity is `route-blocking` **and** `humanReviewed === true`. That flag is set only by an authenticated reviewer (`convex/review.ts`) or carried by the controlled drill inside its own session.
+- **The official TfL live feed is advisory-only.** Real lift disruptions sync every 5 minutes and appear as context, but they carry no `humanReviewed` flag, so they never block a route until a human accepts them.
+- **Invented evidence is refused.** Every candidate must carry a short source excerpt that exists _verbatim_ in the scraped page. A fabricated excerpt fails verification and no incident is created (`convex/lib/excerpt.ts`).
+- **Low-confidence and unknown-station candidates stay pending.** Acceptance requires a verified excerpt, a resolved station, and confidence ≥ 0.7 (`convex/review.ts`).
+
+## The alert pipeline
+
+Alerts are a decoupled, idempotent system — not a for-loop that emails people. A route change fans out to the affected watches, dedupes on a unique key per watch + route change (so a flapping lift can't spam), respects a per-watch budget, and moves through an explicit state machine driven by the Convex scheduler.
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued: route change fans out (idempotent per watch + change)
+    queued --> sending: scheduler claims it (only allowed from queued)
+    sending --> sent: provider accepts
+    sent --> delivered: delivery webhook
+    sent --> bounced: bounce webhook
+    sending --> failed: provider rejects (e.g. 403)
+    delivered --> [*]
+    bounced --> [*]
+    failed --> [*]
+```
+
+Enqueue and deliver are separate: accepting a candidate schedules `internal.alerts.deliverAlert` via `ctx.scheduler.runAfter(0, ...)`, so the mutation stays transactional and the provider call happens off the write path. The `sending` claim can only be made from `queued`, which is what makes a duplicate delivery impossible.
+
+## Where each sponsor fits
+
+| Sponsor | What it does in StepFree | Where |
+| --- | --- | --- |
+| **Convex** | Database, reactive reroute queries, the deterministic router inside the plan query, the human-review gate, scheduler, crons, auth, rate limiting and the site itself | `convex/lib/transit.ts`, `convex/routes.ts`, `convex/review.ts`, `convex/http.ts` |
+| **Firecrawl** | Scrapes the official TfL "lifts & escalators works and closures" page to clean markdown on a 6-hour cron. The URL is hard-coded (users can't supply one), which makes it SSRF-safe | `convex/monitoring.ts` |
+| **OpenAI** | `gpt-5.4-mini` via the Responses API (`strict` `json_schema`, `store: false`) extracts incident candidates + a verbatim excerpt. Output is candidates for review — never a route | `convex/monitoring.ts` |
+| **AgentMail** | Delivers reroute alerts (and account verification codes) through an idempotent queue with a stored provider message id and a delivery status machine | `convex/alerts.ts`, `convex/emailVerification.ts` |
+| **TfL Unified API** | Real lift-disruption feed synced every 5 minutes — advisory context only, never a block | `convex/tfl.ts` |
+
+## Convex components
+
+| Component | What it carries |
+| --- | --- |
+| `@convex-dev/auth` | Password + username auth: profiles, journey history, email verification, and the reviewer-only accept/reject boundary |
+| `@convex-dev/rate-limiter` | Named limits for email sends, code attempts, street-route calls, community reports, journey saves, demo controls, and per-watch / global alert budgets |
+| `@convex-dev/static-hosting` | Serves the entire static-exported Next.js app from `convex.site`, with its catch-all registered _around_ the component-mounted `/auth` routes so auth wins its own paths |
 
 ## Convex depth
 
-- **Full function surface:** queries, mutations, actions, and internal queries/mutations/actions across `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, and more.
-- **Scheduler (decoupled delivery):** enqueue and deliver are separate. Accepting a candidate or evaluating a station schedules `internal.alerts.deliverAlert` via `ctx.scheduler.runAfter(0, ...)`, so the mutation stays transactional and the provider call happens off the write path.
+- **Full function surface:** **52 Convex functions** (12 public queries, 14 public mutations, 3 public actions, plus 23 internal functions) across **15 tables** and **39 indexes** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, and more.
+- **Scheduler (decoupled delivery):** enqueue and deliver are separate, so mutations stay transactional and provider calls run off the write path.
 - **Crons:** TfL lift-disruption sync every **5 minutes**; Firecrawl + OpenAI evidence extraction every **6 hours**.
-- **HTTP router:** registers the `@convex-dev/static-hosting` catch-all _around_ the component-mounted `/auth` routes, so auth wins for its own paths and the static app serves everything else.
 - **Reactive live queries:** the `/proof` reroute updates with no polling and no refresh — a route query re-runs automatically when incident state changes.
-- **Convex Auth:** password + username providers gate profiles, journey history, email verification, and the reviewer boundary.
-- **`@convex-dev/rate-limiter`:** named limits for email sends and code attempts, street-route calls, community reports, journey saves, demo controls, and per-watch / global alert budgets.
-- **`@convex-dev/static-hosting`:** serves the entire static-exported Next.js app from `convex.site`.
-- **Idempotency & dedup:** content-hash dedup on monitoring runs; idempotency keys on alerts, journeys, and email verification; stale-write protection (a `sending` claim can only be made from `queued`).
+- **Idempotency & dedup:** content-hash dedup on monitoring runs; idempotency keys on alerts, journeys and email verification; stale-write protection (a `sending` claim can only be made from `queued`).
+- **Session isolation:** a per-session `demoIncidents` overlay means one judge's `/proof` drill never touches another judge's view or global state.
+
+## Data model
+
+Fifteen tables. The routing and evidence tables are the heart of the system; the rest carry accounts, journeys and the alert pipeline.
+
+```mermaid
+erDiagram
+    stations ||--o{ connections : "step-free edges"
+    stations ||--o{ lifts : "has"
+    stations ||--o{ incidents : "affected by"
+    sourceSnapshots ||--o{ incidentCandidates : "evidence for"
+    incidentCandidates ||--o| incidents : "accepted becomes"
+    routeWatches ||--o{ watchStations : "fans out via"
+    routeWatches ||--o{ alerts : "emits"
+```
+
+| Table | Purpose |
+| --- | --- |
+| `stations` | The 9-station London pilot — graph nodes with coordinates and step-free metadata |
+| `connections` | Step-free edges between stations (the graph the router walks) |
+| `lifts` | Lift inventory per station |
+| `incidents` | Accepted, human-reviewed routing incidents (the only thing that can block a route) |
+| `incidentCandidates` | Pending extractions awaiting review, with full provenance |
+| `sourceSnapshots` | Scraped-page snapshots — URL, fetch time, SHA-256 — behind every candidate |
+| `monitoringRuns` | Evidence-extraction runs, deduped by content hash |
+| `demoIncidents` | Per-session `/proof` drill overlay (session isolation) |
+| `routeWatches` | A traveller watching a specific origin→destination route |
+| `watchStations` | Station → watch fan-out index for O(affected) alerting |
+| `alerts` | The alert queue + delivery status state machine |
+| `journeys` | Saved journeys / history |
+| `reports` | Community-submitted access reports |
+| `users` | Accounts (Convex Auth) |
+| `emailVerifications` | Peppered, expiring OTP codes |
 
 ## The `/proof` judge page — what to click
 
-Open **https://whimsical-ferret-778.convex.site/proof** (no login). Every button calls the real production backend, and the route is drawn on a **live MapLibre map**.
+Open **https://whimsical-ferret-778.convex.site/proof** (no login). Every button calls the real production backend, and the route is drawn on a **live MapLibre map** with an optional immersive 3-D wheelchair simulation.
 
 1. **Pick a journey** — choose any two stations (defaults to Waterloo → Barbican). The route draws on the map with numbered station markers.
 2. **Break a lift on this route** — watch the map **reroute in real time**: the broken station turns red ("lift down"), the original line fades, and a new line redraws from **31 min via Bond Street** to **36 min via London Bridge** — live, no refresh.
 3. **Evidence behind the reroute** — inspect the source, `gpt-5.4-mini`, the SHA-256 content hash, the confidence, the verbatim excerpt, and the review state.
 4. **Send the reroute alert** — enqueue an AgentMail alert (idempotent: one incident, one email).
 5. **Run the safety checks** — executes the actual guard code and reports whether it held: invented evidence is refused, one visitor's drill cannot reroute another (session isolation), and unreviewed feeds cannot reroute.
-6. **Restore the lift / Reset my drill** — return to baseline.
+6. **Start journey / Immersive** — simulate the wheelchair moving along the live route, north-up or in a tilted third-person chase view.
+7. **Restore the lift / Reset** — return to baseline.
 
 **Headline:** one broken lift, **31 → 36 minutes**, rerouted live and warned before the barrier.
 
@@ -132,29 +386,29 @@ Open **https://whimsical-ferret-778.convex.site/proof** (no login). Every button
 - **Backend:** Convex — schema, queries/mutations/actions, internal functions, scheduler, crons, HTTP router, Convex Auth, `@convex-dev/rate-limiter`, `@convex-dev/static-hosting`.
 - **External services:** Firecrawl (official-page scrape), OpenAI `gpt-5.4-mini` (Responses API, structured JSON), AgentMail (email delivery), TfL Unified API (live lift disruptions), Valhalla (wheelchair street routing).
 
-## Challenges / what broke
+## Project layout
 
-- **Keeping the model out of the safety path.** The hard part was not calling an LLM — it was designing so the LLM's output is powerless until a human accepts it. The `humanReviewed` gate lives in the routing engine, not the UI.
-- **Verifying the model didn't invent the notice.** The verbatim-excerpt check (whitespace-collapsed substring match, minimum length) is what lets us trust an extraction without trusting the model's prose. The `/proof` guard proves a forged excerpt is rejected.
-- **No-refresh reroute without polling.** Route fingerprints let a watch decide whether anything actually changed, so live queries drive the UI and alerts only fire on real route changes.
-- **AgentMail send permission.** See _Honest limits_ — the pipeline is complete; the provider key can't yet send.
+```text
+app/                      Next.js 16 routes — /, /navigate, /proof, /account (static export)
+convex/                   Convex backend (schema, functions, crons, HTTP)
+  schema.ts               15 tables
+  routes.ts               step-free route planning (reactive queries)
+  lib/transit.ts          deterministic Dijkstra router + humanReviewed gate
+  lib/excerpt.ts          verbatim source-excerpt verification
+  review.ts               reviewer accept/reject boundary
+  monitoring.ts           Firecrawl scrape + OpenAI extraction
+  tfl.ts                  TfL Unified API live lift feed (advisory)
+  alerts.ts / watches.ts  fan-out index + idempotent alert pipeline
+  drill.ts                session-isolated /proof drill
+  crons.ts                TfL 5 min · evidence 6 h
+  http.ts                 /auth routes + static-hosting catch-all
+features/                 React UI — landing, navigation, proof, account
+shared/                   shared UI + session/lib helpers
+scripts/                  build helpers (MapLibre worker copy)
+docs/                     Excalidraw system-design boards, comparison, video script
+```
 
-## Honest limits
-
-- The London pilot is a **curated 9-station network** (9 stations, 9 connections), not the full TfL graph.
-- Live TfL lift data is **real** and shown as context; the Bond Street incident on `/proof` is a **clearly-labelled controlled drill** so judges can run the full chain on demand rather than waiting for a real-world outage.
-- **AgentMail send currently returns HTTP 403** because the provided API key needs `message_send` permission / account verification. The full alert pipeline — queue, idempotency, per-watch budget, and status machine — is built and verified end-to-end **except the final provider call**; delivery resumes the moment the key can send. Account-verification code delivery uses the same provider and the same limitation applies.
-- Street routing uses a **public Valhalla instance** (10 m – 25 km per request) and public OSM tiles — fine for a demo, not a launch.
-
-## Security
-
-- **OTP with a secret pepper.** Verification codes are hashed with **SHA-256 and a secret pepper** (`OTP_PEPPER`) alongside the request's idempotency key, never stored in plaintext. Codes expire after **10 minutes**, lock after **5 failed attempts**, and a new request supersedes older active codes.
-- **Auth.** Convex Auth (password + username) gates profile edits, journey history, email verification, and the reviewer-only accept/reject boundary.
-- **Rate limits.** `@convex-dev/rate-limiter` covers email sends, code attempts, street-route calls, community reports, journey saves, demo controls, and per-watch / global alert budgets.
-- **Session isolation.** Drill state is scoped to an opaque session id, so one visitor's actions never affect another.
-- **Other controls.** The evidence crawler uses a fixed URL (no SSRF), provider keys stay in Convex environment variables, and alert recipients are masked in queries.
-
-## Local setup
+## Running it yourself
 
 ```bash
 pnpm install
@@ -171,9 +425,9 @@ pnpm setup:local   # seeds the 9-station pilot network
 pnpm dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. To deploy the static frontend to `convex.site`, use `pnpm deploy:web` (build + upload) or `pnpm deploy` (backend + frontend).
 
-## Tests / verification
+## Testing
 
 34 focused tests across 5 files (`pnpm test`, Vitest + `convex-test`) cover the deterministic routing gate — baseline 31 min, the +5 min Bond Street reroute via London Bridge, session isolation, restoration, and the human-reviewed-only block that keeps advisory / unreviewed feed incidents from rerouting anyone — plus verbatim excerpt verification, the peppered OTP hash, station-name resolution, and input validation.
 
@@ -184,6 +438,28 @@ pnpm exec tsc -p convex/tsconfig.json --noEmit
 pnpm build
 ```
 
+## Security
+
+- **OTP with a secret pepper.** Verification codes are hashed with **SHA-256 and a secret pepper** (`OTP_PEPPER`) alongside the request's idempotency key, never stored in plaintext. Codes expire after **10 minutes**, lock after **5 failed attempts**, and a new request supersedes older active codes.
+- **Auth.** Convex Auth (password + username) gates profile edits, journey history, email verification, and the reviewer-only accept/reject boundary.
+- **Rate limits.** `@convex-dev/rate-limiter` covers email sends, code attempts, street-route calls, community reports, journey saves, demo controls, and per-watch / global alert budgets.
+- **Session isolation.** Drill state is scoped to an opaque session id, so one visitor's actions never affect another.
+- **Other controls.** The evidence crawler uses a fixed URL (no SSRF), provider keys stay in Convex environment variables, and alert recipients are masked in queries.
+
+## Known limitations
+
+- The London pilot is a **curated 9-station network** (9 stations, 9 connections), not the full TfL graph.
+- Live TfL lift data is **real** and shown as context; the Bond Street incident on `/proof` is a **clearly-labelled controlled drill** so judges can run the full chain on demand rather than waiting for a real-world outage.
+- **AgentMail send currently returns HTTP 403** because the provided API key needs `message_send` permission / account verification. The full alert pipeline — queue, idempotency, per-watch budget, and status machine — is built and verified end-to-end **except the final provider call**; delivery resumes the moment the key can send. Account-verification code delivery uses the same provider and the same limitation applies.
+- Street routing uses a **public Valhalla instance** (10 m – 25 km per request) and public OSM tiles — fine for a demo, not a launch.
+
+## System-design boards (Excalidraw)
+
+The Mermaid diagrams above render inline on GitHub. The same system design also lives as **editable Excalidraw whiteboards** you can open, pan and share at [excalidraw.com](https://excalidraw.com) (File → Open):
+
+- [`docs/diagrams/stepfree-architecture.excalidraw`](docs/diagrams/stepfree-architecture.excalidraw) — the deployment and provider topology
+- [`docs/diagrams/stepfree-flows.excalidraw`](docs/diagrams/stepfree-flows.excalidraw) — the evidence, review and alert flows
+
 ## Links
 
 - **Live:** https://whimsical-ferret-778.convex.site
@@ -191,6 +467,11 @@ pnpm build
 - **Repo:** https://github.com/treasure567/stepfree
 - **Video:** <!-- VIDEO_URL -->
 - **Build log:** [`hackathon.md`](hackathon.md)
-- **Architecture diagrams (Excalidraw, open at excalidraw.com):** [`docs/diagrams/`](docs/diagrams/)
 - **Competitive analysis:** [`docs/comparison.md`](docs/comparison.md)
 - **Demo video script:** [`docs/video-script.md`](docs/video-script.md)
+
+## License & attributions
+
+- **Code:** MIT — see [`LICENSE`](LICENSE).
+- **Map data:** © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors; tiles by [HOT](https://www.hotosm.org/). Street routing by [Valhalla](https://github.com/valhalla/valhalla).
+- **Transit data:** Powered by TfL Open Data — contains OS data © Crown copyright and database rights. Lift-status and works notices are the property of Transport for London and are used here as context.
