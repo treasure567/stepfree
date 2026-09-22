@@ -18,6 +18,14 @@ StepFree is a live accessibility layer for public transit. It watches official a
 - **Demo video:** VIDEO_URL
 - **Launch post:** LAUNCH_POST_URL
 
+## At a glance, for judging
+
+- **What it is** — an everyday app for wheelchair users and anyone who can't take stairs. It notices the lift on your route just failed and reroutes you step-free **before** you reach the barrier, then emails you the new journey. Not a developer tool.
+- **Would a real person use it this week** — yes: about a third of London Underground stations are step-free, lifts fail daily, and today's planners keep calling a station accessible after its lift breaks. StepFree closes that gap.
+- **Convex depth** — 117 exported handlers, 23 tables and 61 indexes, reactive route queries that push updates with no browser polling, Convex Auth, 8 mounted components (including `@convex-dev/workflow` and two `@convex-dev/workpool` instances), 4 crons, and signed HTTP webhooks. The route is computed inside a Convex mutation and served from `convex.site`.
+- **Sponsors doing real work** — Firecrawl **crawls** the official TfL accessibility page (with provenance); OpenAI **generates** structured incidents plus a verbatim source quote; AgentMail **sends** the reroute alert and **receives** the traveller's reply through a Svix-verified webhook (two-way). None of them just sit in the README.
+- **Live on convex.site** — [whimsical-ferret-778.convex.site](https://whimsical-ferret-778.convex.site); the full judge path needs no login at [`/proof`](https://whimsical-ferret-778.convex.site/proof).
+
 ## The moment we built for
 
 Maya plans a step-free journey from **Waterloo to Barbican**. The best route takes **31 minutes through Bond Street**.
