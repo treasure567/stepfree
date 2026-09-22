@@ -52,6 +52,7 @@ export function NavigatorScreen() {
   const [journeyImmersive, setJourneyImmersive] = useState(false);
   const [journeyProgress, setJourneyProgress] = useState(0);
   const [journeyArrived, setJourneyArrived] = useState(false);
+  const [guidanceFocus, setGuidanceFocus] = useState<Coordinate | null>(null);
   const location = useLiveLocation();
 
   const stopJourney = useCallback(() => {
@@ -73,6 +74,7 @@ export function NavigatorScreen() {
   const changeTransitRoute = useCallback(
     (route: Station[]) => {
       setTransitRoute(route);
+      setGuidanceFocus(null);
       stopJourney();
     },
     [stopJourney],
@@ -98,6 +100,7 @@ export function NavigatorScreen() {
 
   function changeMode(nextMode: "street" | "transit") {
     stopJourney();
+    setGuidanceFocus(null);
     setMode(nextMode);
     setSelectionMode(nextMode === "street" ? "origin" : null);
     window.history.replaceState(
@@ -160,6 +163,7 @@ export function NavigatorScreen() {
         immersive={journeyImmersive}
         onJourneyProgress={onJourneyProgress}
         onJourneyEnd={onJourneyEnd}
+        guidanceFocus={guidanceFocus}
       />
 
       <header className="navigator-topbar">
@@ -220,6 +224,7 @@ export function NavigatorScreen() {
             initialFromSlug={initialFromSlug}
             initialToSlug={initialToSlug}
             onRouteChange={changeTransitRoute}
+            onGuidanceStep={setGuidanceFocus}
           />
         )}
 

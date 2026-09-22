@@ -954,6 +954,30 @@
   }
 }
 
+.nav-guidance-focus {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--lime) 55%, transparent);
+  border: 3px solid var(--lime);
+  box-shadow: 0 0 0 4px rgba(185, 242, 39, 0.25);
+  animation: nav-guidance-pulse 1.6s ease-out infinite;
+}
+@keyframes nav-guidance-pulse {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(0.75);
+    opacity: 0.9;
+  }
+}
+
 .nav-wheelchair {
   position: relative;
   display: grid;

@@ -30,6 +30,7 @@ type AccessMapProps = {
   immersive?: boolean;
   onJourneyProgress?: (fraction: number) => void;
   onJourneyEnd?: () => void;
+  guidanceFocus?: Coordinate | null;
 };
 
 const JOURNEY_BASE_SECONDS = 32;
@@ -180,6 +181,7 @@ export function AccessMap({
   immersive = false,
   onJourneyProgress,
   onJourneyEnd,
+  guidanceFocus = null,
 }: AccessMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -195,6 +197,7 @@ export function AccessMap({
   const camPitchRef = useRef(0);
   const camBearingRef = useRef(0);
   const wheelchairRef = useRef<Marker | null>(null);
+  const guidanceMarkerRef = useRef<Marker | null>(null);
   const journeyRef = useRef({ mode, transitRoute, streetRoute, speed, immersive });
   const journeyCbRef = useRef({ onJourneyProgress, onJourneyEnd });
   const [mapReady, setMapReady] = useState(false);
@@ -391,6 +394,43 @@ export function AccessMap({
     map.resize();
     return () => observer.disconnect();
   }, [mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = maplibreRef.current;
+    if (!mapReady || !map || !maplibre) return;
+
+    if (!guidanceFocus || journeying) {
+      guidanceMarkerRef.current?.remove();
+      guidanceMarkerRef.current = null;
+      return;
+    }
+
+    const lngLat: [number, number] = [
+      guidanceFocus.longitude,
+      guidanceFocus.latitude,
+    ];
+    if (!guidanceMarkerRef.current) {
+      const element = document.createElement("div");
+      element.className = "nav-guidance-focus";
+      guidanceMarkerRef.current = new maplibre.Marker({
+        element,
+        anchor: "center",
+      })
+        .setLngLat(lngLat)
+        .addTo(map);
+    } else {
+      guidanceMarkerRef.current.setLngLat(lngLat);
+    }
+
+    map.easeTo({
+      center: lngLat,
+      zoom: Math.max(map.getZoom(), 14.5),
+      pitch: 0,
+      bearing: 0,
+      duration: 700,
+    });
+  }, [mapReady, guidanceFocus, journeying]);
 
   useEffect(() => {
     const map = mapRef.current;

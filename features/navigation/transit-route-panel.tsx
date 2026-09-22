@@ -30,11 +30,15 @@ export function TransitRoutePanel({
   initialFromSlug,
   initialToSlug,
   onRouteChange,
+  onGuidanceStep,
 }: {
   stations: Station[];
   initialFromSlug: string;
   initialToSlug: string;
   onRouteChange: (stations: Station[]) => void;
+  onGuidanceStep?: (
+    coordinate: { latitude: number; longitude: number } | null,
+  ) => void;
 }) {
   const [fromSlug, setFromSlug] = useState(initialFromSlug);
   const [toSlug, setToSlug] = useState(initialToSlug);
@@ -74,6 +78,21 @@ export function TransitRoutePanel({
   useEffect(() => {
     onRouteChange(routeStations);
   }, [onRouteChange, routeStations]);
+
+  useEffect(() => {
+    if (!onGuidanceStep) return;
+    if (guidanceStarted && routePlan?.status === "ready") {
+      const list = routePlan.stations;
+      const station = list[Math.min(currentStep, list.length - 1)];
+      onGuidanceStep(
+        station
+          ? { latitude: station.latitude, longitude: station.longitude }
+          : null,
+      );
+    } else {
+      onGuidanceStep(null);
+    }
+  }, [guidanceStarted, currentStep, routePlan, onGuidanceStep]);
 
   useEffect(() => {
     if (routePlan?.status !== "ready") {
