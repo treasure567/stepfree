@@ -149,7 +149,7 @@ flowchart TB
       Sched["Scheduler<br/>deliverAlert"]
       Cron["Crons<br/>TfL 5 min · evidence 6 h"]
       Http["HTTP router<br/>/auth + static catch-all"]
-      DB[("Database<br/>15 tables")]
+      DB[("Database<br/>20 tables")]
     end
 
     subgraph Providers
@@ -323,10 +323,16 @@ Enqueue and deliver are separate: accepting a candidate schedules `internal.aler
 | `@convex-dev/auth` | Password + username auth: profiles, journey history, email verification, and the reviewer-only accept/reject boundary |
 | `@convex-dev/rate-limiter` | Named limits for email sends, code attempts, street-route calls, community reports, journey saves, demo controls, and per-watch / global alert budgets |
 | `@convex-dev/static-hosting` | Serves the entire static-exported Next.js app from `convex.site`, with its catch-all registered _around_ the component-mounted `/auth` routes so auth wins its own paths |
+| `@convex-dev/workflow` | Runs the evidence pipeline and emergency escalation as durable, resumable, retryable workflows |
+| `@convex-dev/workpool` (×2) | `extractionPool` bounds scrape/LLM work; `deliveryPool` bounds outbound notifications — mounted as two named instances |
 
 ## Convex depth
 
-- **Full function surface:** **52 Convex functions** (12 public queries, 14 public mutations, 3 public actions, plus 23 internal functions) across **15 tables** and **39 indexes** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, and more.
+- **Full function surface:** **77 Convex functions** across **20 tables** and **55 indexes**, plus **2 durable workflows**, **2 workpools**, **4 HTTP webhook routes**, an **event bus**, and **first-class idempotency** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, `emergency`, `events`, `webhooks`, and more. See [`docs/architecture.md`](docs/architecture.md) for the full system design and the audited gap-map (`scripts/audit-convex.sh`).
+- **Durable workflows (`@convex-dev/workflow`):** the 6-hour evidence run and the emergency escalation both run as durable, retryable, resumable workflows.
+- **Workpools (`@convex-dev/workpool`):** `extractionPool` bounds scrape/LLM concurrency; `deliveryPool` bounds outbound notifications.
+- **Event bus:** an idempotent `events` table with scheduler-driven dispatch decouples producers (reviewer accepts, lift restored, SOS raised, webhook received) from consumers.
+- **Signed webhooks:** AgentMail delivery + inbound and a partner lift-status feed, each verified with timing-safe **HMAC-SHA256** and de-duplicated on the provider event id (`convex/lib/webhookAuth.ts`, `convex/webhooks.ts`).
 - **Scheduler (decoupled delivery):** enqueue and deliver are separate, so mutations stay transactional and provider calls run off the write path.
 - **Crons:** TfL lift-disruption sync every **5 minutes**; Firecrawl + OpenAI evidence extraction every **6 hours**.
 - **Reactive live queries:** the `/proof` reroute updates with no polling and no refresh — a route query re-runs automatically when incident state changes.
@@ -335,7 +341,7 @@ Enqueue and deliver are separate: accepting a candidate schedules `internal.aler
 
 ## Data model
 
-Fifteen tables. The routing and evidence tables are the heart of the system; the rest carry accounts, journeys and the alert pipeline.
+Twenty tables. The routing and evidence tables are the heart of the system; the rest carry accounts, journeys, the alert pipeline, the event bus, idempotency, webhooks and the emergency service.
 
 ```mermaid
 erDiagram
@@ -365,6 +371,11 @@ erDiagram
 | `reports` | Community-submitted access reports |
 | `users` | Accounts (Convex Auth) |
 | `emailVerifications` | Peppered, expiring OTP codes |
+| `events` | Event bus log, idempotent on `dedupeKey`, scheduler-dispatched |
+| `idempotencyKeys` | First-class idempotency claims across every ingress |
+| `emergencies` | SOS lifecycle: raised → acknowledged → escalated → resolved |
+| `inboundMessages` | Parsed inbound email replies (intent + matched watch) |
+| `webhookReceipts` | Verified / duplicate / rejected webhook audit trail |
 
 ## The `/proof` judge page — what to click
 

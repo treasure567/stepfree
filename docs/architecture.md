@@ -1,110 +1,153 @@
-# StepFree architecture
+# StepFree — system architecture & the depth plan
 
-## System boundary
+This document is the engineering gap-map against **Parallel** (`Enoch208/parallel@b3918049`) and the design for closing it **without fake complexity**. Every addition deepens the real incident → reroute → alert → escalation path.
 
-StepFree has one Next.js web client and one Convex backend. There are no Next.js API routes and no second database.
+## Gap map (audited, reproducible)
 
-```text
-Browser
-  Next.js App Router
-  MapLibre map
-  Device geolocation
-      |
-      v
-Convex
-  Auth and user profiles
-  Queries and mutations
-  Node actions
-  Scheduled jobs
-  Database and realtime subscriptions
-      |
-      +--> TfL lift disruption API
-      +--> Valhalla wheelchair routing
-      +--> Firecrawl official page extraction
-      +--> OpenAI structured evidence extraction
-      +--> AgentMail verification delivery
+Numbers come from an identical script run over both repos (`scripts/audit-convex.sh`).
+
+| Axis | Parallel | StepFree (before) | StepFree (target) | Strategy |
+| --- | ---: | ---: | ---: | --- |
+| Convex functions | 103 | 52 | **> 103** | Real subsystems: event bus, emergency, webhooks, workflow steps, delivery |
+| Tables | 19 | 15 | **≥ 20** | `events`, `idempotencyKeys`, `emergencies`, `inboundMessages`, `webhookReceipts` |
+| Indexes | 35 | 39 | **> 50** | Every new table fully indexed; no full scans |
+| Mounted components | 4 | 3 | **5** | + `@convex-dev/workflow`, + `@convex-dev/workpool` (×2 named) |
+| Durable workflows | 1 | 0 | **2** | evidence pipeline + emergency escalation |
+| Workpools | 1 | 0 | **2** | `extractionPool` (scrape/LLM), `deliveryPool` (outbound) |
+| HTTP actions / webhooks | 2 | 0 | **≥ 3** | AgentMail inbound, AgentMail delivery, partner lift-status, health |
+| Webhook signature verification | Svix | — | **HMAC-SHA256, timing-safe** | `convex/lib/webhookAuth.ts` |
+| Event bus | — | — | **yes** | `events` table + idempotent publish + scheduler dispatch |
+| Idempotency | records | keys on 3 tables | **first-class helper** | `convex/lib/idempotency.ts`, used by every ingress |
+| Crons | 3 | 2 | **≥ 3** | + event/webhook-receipt cleanup |
+| Emergency service | — | — | **yes** | SOS → event → durable escalation |
+
+**Where StepFree already leads and keeps leading:** more indexes than Parallel, Convex Auth (they have none), the rate-limiter component (they have none), the human-review safety gate, and per-session isolation.
+
+## New components
+
+```mermaid
+flowchart TB
+    subgraph App["StepFree Convex app"]
+      direction TB
+      Core["core functions"]
+    end
+    subgraph Components["mounted components (5)"]
+      Auth["@convex-dev/auth"]
+      RL["@convex-dev/rate-limiter"]
+      SH["@convex-dev/static-hosting"]
+      WF["@convex-dev/workflow"]
+      WPx["workpool · extractionPool"]
+      WPd["workpool · deliveryPool"]
+    end
+    App --> Auth
+    App --> RL
+    App --> SH
+    App --> WF
+    App --> WPx
+    App --> WPd
 ```
 
-## Frontend layout
+## Durable evidence workflow (workflow + workpool together)
 
-`app` owns routes and page composition. `features` owns account, landing, and navigation product areas. `shared` contains cross-feature providers, utilities, and UI primitives.
+The 6-hour evidence run becomes a durable workflow whose heavy scrape/LLM step is bounded by `extractionPool`. A crash resumes from the last completed step instead of re-scraping.
 
-Map state, live GPS, and route progress stay inside the navigation feature. Account forms and mobility settings stay inside the account feature. Convex client setup and PWA registration stay in shared providers.
+```mermaid
+flowchart TD
+    Cron["cron · every 6h"] --> Start["workflow.start(evidenceWorkflow)"]
+    Start --> S1["step.runAction · refresh evidence (retry, bounded by extractionPool)"]
+    S1 --> S2["step.runMutation · record run + candidates"]
+    S2 --> OC{"onComplete"}
+    OC -- "success" --> Done["run marked complete"]
+    OC -- "error" --> Fail["run marked failed · retried next cycle"]
+```
 
-## Backend layout
+## Event bus
 
-Public Convex functions are grouped by business capability. `lib` contains reusable validation, routing, cryptography, and rate-limit configuration. `providers` contains the only code that speaks to external services.
+A single idempotent publish point decouples producers (reviewer accepts, lift restored, SOS raised, webhook received) from consumers (alerts, escalation, reconciliation). Duplicate events collapse on `dedupeKey`.
 
-The backend does not use MVC. Convex functions are the transport boundary and transactional service layer. Adding controllers and model classes would create empty indirection around Convex queries and mutations.
+```mermaid
+flowchart LR
+    P1["incident.accepted"] --> BUS[("events table\nidempotent on dedupeKey")]
+    P2["route.changed"] --> BUS
+    P3["emergency.raised"] --> BUS
+    P4["webhook.received"] --> BUS
+    BUS --> D["dispatch (scheduler)"]
+    D --> H1["→ enqueue alerts"]
+    D --> H2["→ start escalation workflow"]
+    D --> H3["→ reconcile delivery"]
+```
 
-## Core data flows
+## Webhook ingress with HMAC verification + idempotency
 
-### Transit routing
+Every inbound webhook is verified (timing-safe HMAC-SHA256), de-duplicated on the provider event id, then reduced to an internal mutation. Handlers narrow `unknown` and fail closed.
 
-1. The browser subscribes to a route query.
-2. Convex reads the station graph, lift state, and active incidents.
-3. The deterministic route engine rejects inaccessible stations and ranks valid alternatives.
-4. Incident mutations invalidate the query automatically.
-5. Convex pushes the changed route to every subscribed client.
+```mermaid
+sequenceDiagram
+    participant Ext as Provider (AgentMail / partner)
+    participant H as httpAction /webhooks/*
+    participant V as verifyHmacSignature
+    participant R as webhookReceipts
+    participant M as internal mutation
 
-### Street routing
+    Ext->>H: POST body + signature header
+    H->>V: HMAC-SHA256(secret, rawBody)
+    V-->>H: valid?
+    H->>R: seen this event id? (idempotent)
+    alt invalid signature
+        H-->>Ext: 401
+    else duplicate
+        H-->>Ext: 200 (no-op)
+    else accepted
+        H->>M: apply effect (narrowed, validated)
+        M-->>H: ok
+        H-->>Ext: 200
+    end
+```
 
-1. The traveller chooses origin and destination coordinates on the map.
-2. The browser sends the coordinates and an opaque session identifier to a rate-limited Convex action.
-3. Convex validates the coordinates and enforces a 10 metre to 25 kilometre request range.
-4. The Valhalla provider requests wheelchair costing and returns geometry plus manoeuvres.
-5. The browser compares each GPS update with the route geometry to estimate remaining distance.
+**Delivery webhook** advances the alert state machine into its previously-unreachable `delivered` / `bounced` states, keyed by `providerMessageId`.
 
-Street coordinates and GPS samples are not stored.
+## Emergency service (SOS)
 
-### Official evidence monitoring
+A traveller stuck at a broken barrier raises an SOS. It is rate-limited, idempotent per session-window, published to the bus, and escalated by a durable workflow if no one acknowledges in time.
 
-1. A six-hour cron calls an internal Node action.
-2. Firecrawl reads one fixed TfL page. Users cannot supply a URL.
-3. Convex hashes the markdown and creates one run per content hash.
-4. OpenAI returns strict JSON candidates with the station, date text, impact, alternate access, confidence, and source excerpt.
-5. Convex stores candidates as pending review.
-6. Candidates do not change route eligibility automatically.
+```mermaid
+stateDiagram-v2
+    [*] --> raised: emergency.raise (rate-limited, idempotent)
+    raised --> acknowledged: reviewer/ops acknowledges
+    raised --> escalated: escalation workflow, window elapsed, still unacknowledged
+    escalated --> acknowledged: ops acknowledges
+    acknowledged --> resolved: resolve
+    raised --> cancelled: traveller cancels
+    resolved --> [*]
+    cancelled --> [*]
+```
 
-### Email verification
+```mermaid
+flowchart LR
+    SOS["emergency.raise"] --> EV["events: emergency.raised"]
+    SOS --> WF["workflow.start(emergencyEscalationWorkflow)"]
+    WF --> N1["step.runMutation · markNotified"]
+    N1 --> DP["deliveryPool.enqueueAction · notify"]
+    WF --> SL["step.sleep(window)"]
+    SL --> CK{"still unacknowledged?"}
+    CK -- "yes" --> ESC["step.runMutation · markEscalated"]
+    ESC --> DP
+    CK -- "no" --> END["done"]
+```
 
-1. An authenticated user requests a code with an idempotency key.
-2. Convex applies per-user and global limits.
-3. A cryptographically random six-digit code is hashed with the idempotency key.
-4. Convex stores the hash and expiry before calling AgentMail.
-5. A successful comparison marks the address verified.
-6. Five failed attempts lock the request. New requests supersede older active codes.
+## Data model additions
 
-## Consistency and idempotency
+| Table | Purpose | Key indexes |
+| --- | --- | --- |
+| `events` | Event bus log, idempotent on `dedupeKey` | `by_dedupe`, `by_status`, `by_type_and_created` |
+| `idempotencyKeys` | First-class idempotency claims across ingress points | `by_scope_and_key` |
+| `emergencies` | SOS lifecycle (raised→acknowledged→escalated→resolved) | `by_session`, `by_status`, `by_station`, `by_idempotency` |
+| `inboundMessages` | Parsed inbound email replies (AgentMail) | `by_provider_message`, `by_from`, `by_idempotency` |
+| `webhookReceipts` | Verified/duplicate/rejected webhook audit | `by_source_and_event`, `by_received_at` |
 
-Convex mutations are transactional. Journey saves, community reports, email requests, demo state changes, and evidence runs all use stable deduplication keys or desired-state writes.
+## Non-negotiables (kept from the safety model)
 
-External actions are treated as non-transactional boundaries. The email flow records pending state before delivery, then records sent or failed. The monitoring flow creates a processing run before OpenAI work, then records completed or failed. Repeated monitoring content is skipped by hash.
-
-## Caching
-
-There is no Redis instance. Convex caches query results and invalidates subscribed queries when their dependencies change. A second cache would require another invalidation protocol and could serve stale lift state, which is the exact failure StepFree must avoid.
-
-## Failure handling
-
-- TfL failures create a failed source snapshot and do not erase the last known route state.
-- Firecrawl and OpenAI failures mark the evidence run failed when a run exists.
-- Extracted AI candidates never enter live routing without a review decision.
-- AgentMail failures mark the verification request failed and clear the pending address.
-- Valhalla timeouts return a route error while map selection remains usable.
-- GPS denial falls back to manual map pinning.
-
-## Security controls
-
-- Authentication is required for profile changes, journey history, and email verification.
-- Public mutations validate identifiers, ownership, string lengths, coordinates, and related records.
-- Rate limits cover email sends, code attempts, route calls, reports, saves, and demo controls.
-- Verification codes are hashed and expire after ten minutes.
-- Provider keys remain in Convex environment variables.
-- The evidence crawler uses a fixed URL to prevent server-side request forgery.
-- The browser applies a restrictive content security policy and permits only the configured map tile origin.
-- Map popups use DOM text nodes for user-visible data.
-
-## Production gaps
-
-The public Valhalla service and community OpenStreetMap tiles are suitable for a hackathon demonstration, not a high-volume launch. Production needs contracted or self-hosted routing and tiles, service-level monitoring, a full network import, reviewed accessibility data coverage, and an incident operations console.
+- Routing stays deterministic; no model in the decision path.
+- Inbound feeds (partner lift-status, TfL) remain **advisory** until human-reviewed.
+- Mutations never call the network; all provider I/O is in actions, bounded by workpools.
+- Every query uses an index; no `.collect()` on unbounded tables.

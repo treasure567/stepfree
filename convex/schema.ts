@@ -285,6 +285,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
+    .index("by_email_normalized", ["emailNormalized"])
     .index("by_user_route", ["userId", "fromStationId", "toStationId"]),
   watchStations: defineTable({
     watchId: v.id("routeWatches"),
@@ -338,4 +339,100 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
     .index("by_provider_message", ["providerMessageId"]),
+  events: defineTable({
+    type: v.string(),
+    dedupeKey: v.string(),
+    data: v.any(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("dispatched"),
+      v.literal("failed"),
+    ),
+    attempts: v.number(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    dispatchedAt: v.optional(v.number()),
+  })
+    .index("by_dedupe", ["dedupeKey"])
+    .index("by_status", ["status"])
+    .index("by_type_and_created", ["type", "createdAt"]),
+  idempotencyKeys: defineTable({
+    scope: v.string(),
+    key: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_scope_and_key", ["scope", "key"])
+    .index("by_expires_at", ["expiresAt"]),
+  emergencies: defineTable({
+    sessionId: v.string(),
+    userId: v.optional(v.id("users")),
+    stationId: v.optional(v.id("stations")),
+    stationSlug: v.optional(v.string()),
+    journeyId: v.optional(v.id("journeys")),
+    kind: v.union(
+      v.literal("stuck-no-lift"),
+      v.literal("trapped-in-lift"),
+      v.literal("needs-assistance"),
+    ),
+    status: v.union(
+      v.literal("raised"),
+      v.literal("acknowledged"),
+      v.literal("escalated"),
+      v.literal("resolved"),
+      v.literal("cancelled"),
+    ),
+    note: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    contactMasked: v.optional(v.string()),
+    notifiedAt: v.optional(v.number()),
+    escalatedAt: v.optional(v.number()),
+    acknowledgedBy: v.optional(v.string()),
+    acknowledgedAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+    idempotencyKey: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_status", ["status"])
+    .index("by_station", ["stationId"])
+    .index("by_idempotency", ["idempotencyKey"])
+    .index("by_created_at", ["createdAt"]),
+  inboundMessages: defineTable({
+    source: v.literal("agentmail"),
+    providerMessageId: v.string(),
+    threadId: v.optional(v.string()),
+    fromEmail: v.string(),
+    fromNormalized: v.string(),
+    subject: v.optional(v.string()),
+    text: v.optional(v.string()),
+    watchId: v.optional(v.id("routeWatches")),
+    parsedIntent: v.optional(
+      v.union(
+        v.literal("arrived"),
+        v.literal("still-stuck"),
+        v.literal("pause"),
+        v.literal("unknown"),
+      ),
+    ),
+    idempotencyKey: v.string(),
+    receivedAt: v.number(),
+  })
+    .index("by_provider_message", ["providerMessageId"])
+    .index("by_from", ["fromNormalized"])
+    .index("by_idempotency", ["idempotencyKey"]),
+  webhookReceipts: defineTable({
+    source: v.string(),
+    eventId: v.string(),
+    signatureValid: v.boolean(),
+    status: v.union(
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("duplicate"),
+    ),
+    receivedAt: v.number(),
+  })
+    .index("by_source_and_event", ["source", "eventId"])
+    .index("by_received_at", ["receivedAt"]),
 });

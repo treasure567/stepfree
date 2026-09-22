@@ -5,6 +5,8 @@ import passwordProvider from "@convex-dev/auth/providers/password/convex.config.
 import username from "@convex-dev/auth/username/convex.config.js";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config.js";
 import staticHosting from "@convex-dev/static-hosting/convex.config";
+import workflow from "@convex-dev/workflow/convex.config.js";
+import workpool from "@convex-dev/workpool/convex.config.js";
 
 const app = defineApp({
   env: {
@@ -24,5 +26,8 @@ app.use(passwordProvider);
 app.use(username);
 app.use(rateLimiter);
 app.use(staticHosting);
+app.use(workflow);
+app.use(workpool, { name: "extractionPool" });
+app.use(workpool, { name: "deliveryPool" });
 
 export default app;

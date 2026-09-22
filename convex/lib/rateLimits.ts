@@ -91,4 +91,24 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 12,
     capacity: 12,
   },
+  emergencyPerSession: {
+    kind: "fixed window",
+    period: MINUTE,
+    rate: 3,
+    capacity: 3,
+  },
+  emergencyGlobal: {
+    kind: "token bucket",
+    period: MINUTE,
+    rate: 60,
+    capacity: 60,
+    shards: 5,
+  },
+  webhookPerSource: {
+    kind: "token bucket",
+    period: MINUTE,
+    rate: 240,
+    capacity: 240,
+    shards: 3,
+  },
 });
