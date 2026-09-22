@@ -792,3 +792,35 @@
     flex-direction: column;
   }
 }
+
+.account-demo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.6rem;
+  border: 1.5px solid #0f1512;
+  border-radius: 0.7rem;
+  background: #b9f227;
+  color: #0f1512;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.account-demo-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.account-demo-hint {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  color: #5b6b66;
+  line-height: 1.45;
+}
+.account-demo-hint code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+}

@@ -7,6 +7,9 @@ import { useSignUpWithPassword } from "@convex-dev/auth/providers/password/react
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 
+const DEMO_USERNAME = "demo";
+const DEMO_PASSWORD = "stepfree-demo-2026";
+
 type AuthError = {
   error: string;
   minimumLength?: number;
@@ -48,10 +51,10 @@ function authErrorMessage(error: AuthError) {
 }
 
 export function AuthForm() {
-  const [mode, setMode] = useState<"signup" | "login">("signup");
-  const [username, setUsername] = useState("");
+  const [mode, setMode] = useState<"signup" | "login">("login");
+  const [username, setUsername] = useState(DEMO_USERNAME);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState("");
   const [sendingVerification, setSendingVerification] = useState(false);
   const requestVerification = useAction(api.emailVerification.request);
@@ -89,6 +92,34 @@ export function AuthForm() {
         setSendingVerification(false);
       }
     }
+  }
+
+  async function continueAsDemo() {
+    setError("");
+    setMode("login");
+    setUsername(DEMO_USERNAME);
+    setPassword(DEMO_PASSWORD);
+    const result = await signIn({
+      username: DEMO_USERNAME,
+      password: DEMO_PASSWORD,
+    });
+    if (result.success) {
+      return;
+    }
+    if (
+      result.userError.error === "USER_NOT_FOUND" ||
+      result.userError.error === "INVALID_CREDENTIALS"
+    ) {
+      const created = await signUp({
+        username: DEMO_USERNAME,
+        password: DEMO_PASSWORD,
+      });
+      if (!created.success) {
+        setError(authErrorMessage(created.userError));
+      }
+      return;
+    }
+    setError(authErrorMessage(result.userError));
   }
 
   function changeMode(nextMode: "signup" | "login") {
@@ -129,6 +160,20 @@ export function AuthForm() {
             : "Continue with your saved routes and access settings."}
         </p>
       </div>
+
+      <button
+        type="button"
+        className="account-demo-button"
+        onClick={continueAsDemo}
+        disabled={pending}
+      >
+        {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+        Continue as demo account
+      </button>
+      <p className="account-demo-hint">
+        Judges: the demo login is pre-filled — just press <strong>Sign in</strong>,
+        or use the button above. Unlocks your profile and the <code>/ops</code> console.
+      </p>
 
       <form className="account-auth-form" onSubmit={submit}>
         <label>
