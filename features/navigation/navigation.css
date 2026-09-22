@@ -876,3 +876,137 @@
     display: none;
   }
 }
+
+.nav-wheelchair {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+}
+.nav-wheelchair-dot {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.nav-wheelchair-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(26, 115, 232, 0.35);
+  animation: nav-wheelchair-pulse 1.8s ease-out infinite;
+}
+@keyframes nav-wheelchair-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+.navigator-journey {
+  margin-top: 0.9rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+.navigator-journey-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #47514d;
+  margin-bottom: 0.6rem;
+}
+.navigator-journey-progress {
+  color: #1a73e8;
+}
+.navigator-journey-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.navigator-journey-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: none;
+  border-radius: 0.7rem;
+  background: #111;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.navigator-journey-button.is-ghost {
+  background: transparent;
+  color: #111;
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+}
+.navigator-journey-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+.navigator-journey-speed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.7rem;
+  color: #47514d;
+  flex: 1;
+}
+.navigator-journey-speed input {
+  width: 100%;
+}
+.navigator-journey-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+  border-radius: 0.7rem;
+  background: transparent;
+  color: #16211d;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.navigator-journey-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+.navigator-journey-toggle span {
+  margin-left: auto;
+  color: #8a938f;
+}
+.navigator-journey-toggle.is-on {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+.navigator-journey-toggle.is-on span {
+  color: #b9f227;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-wheelchair-ring {
+    animation: none;
+  }
+}

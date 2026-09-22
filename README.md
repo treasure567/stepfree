@@ -59,6 +59,15 @@ _Real people. Real words. Every quote links to the original — go read them._
 
 Built for the Convex **All Gas** hackathon on **Convex + Firecrawl + OpenAI + AgentMail**.
 
+### What we used from each hackathon provider
+
+- **Convex** — the entire backend is one Convex deployment: **86 functions** (23 public queries · 21 public mutations · 3 public actions · 39 internal), **21 tables**, **56 indexes**, the **reactive** no-refresh reroute, the **scheduler** (6 hand-offs), **4 cron jobs**, the **HTTP router** (4 routes), and **5 mounted components** — Convex **Auth**, **`@convex-dev/rate-limiter`** (17 named limits), **`@convex-dev/static-hosting`** (serves this whole app from `convex.site`), **`@convex-dev/workflow`** (2 durable workflows), and **`@convex-dev/workpool`** (2 bounded pools). The deterministic Dijkstra router and the human-review gate live inside Convex functions.
+- **Firecrawl** — scrapes the official TfL _lifts & escalators works and closures_ page to clean markdown on a 6-hour cron; a hard-coded URL keeps it SSRF-safe and every scrape is content-hashed for provenance and dedup (`convex/monitoring.ts`).
+- **OpenAI** — `gpt-5.4-mini` via the Responses API (strict `json_schema`, `store: false`) turns that markdown into incident candidates, each carrying a **verbatim source excerpt** we re-verify character-for-character before trusting it. The model never chooses a route (`convex/monitoring.ts`).
+- **AgentMail** — delivers the reroute alert (and account codes) through an idempotent queue with a provider message id and a `queued → sending → sent → delivered/bounced/failed` state machine; delivery receipts and inbound replies return via **HMAC-verified webhooks** (`convex/alerts.ts`, `convex/webhooks.ts`, `convex/http.ts`).
+
+See [By the numbers](#by-the-numbers) for the full inventory and [`docs/architecture.md`](docs/architecture.md) for the system design; every count is reproducible with `scripts/audit-convex.sh`.
+
 - **Live:** https://whimsical-ferret-778.convex.site
 - **Judge demo (live, no login):** https://whimsical-ferret-778.convex.site/proof
 - **Repo:** https://github.com/treasure567/stepfree
@@ -109,17 +118,17 @@ Reproducible with [`scripts/audit-convex.sh`](scripts/audit-convex.sh).
 
 | | Count | Detail |
 | --- | ---: | --- |
-| **Convex functions** | **77** | 20 public queries · 18 public mutations · 3 public actions · 3 internal queries · 27 internal mutations · 6 internal actions |
-| **Tables** | **20** | fully indexed; no unbounded scans |
-| **Indexes** | **55** | every query is index-backed |
+| **Convex functions** | **86** | 23 public queries · 21 public mutations · 3 public actions · 4 internal queries · 29 internal mutations · 6 internal actions |
+| **Tables** | **21** | fully indexed; no unbounded scans |
+| **Indexes** | **56** | every query is index-backed |
 | **Mounted components** | **5** | auth · rate-limiter · static-hosting · workflow · workpool (×2 named instances) |
 | **Durable workflows** | **2** | evidence pipeline · emergency escalation |
 | **Workpools** | **2** | `extractionPool` (scrape/LLM) · `deliveryPool` (outbound) |
 | **HTTP routes** | **4** | AgentMail delivery · AgentMail inbound · partner lift-status · health |
-| **Cron jobs** | **3** | TfL sync (5 min) · evidence workflow (6 h) · idempotency cleanup (12 h) |
+| **Cron jobs** | **4** | TfL sync (5 min) · evidence workflow (6 h) · idempotency cleanup (12 h) · stuck-alert reconcile (15 min) |
 | **Named rate limits** | **17** | per-session and global buckets on every ingress |
 | **Scheduler hand-offs** | **4** | provider I/O and dispatch run off the write path |
-| **Automated tests** | **54** | across 10 files (Vitest + `convex-test`) |
+| **Automated tests** | **62** | across 12 files (Vitest + `convex-test`) |
 | **External services** | **4** | Firecrawl · OpenAI · AgentMail · TfL Unified API |
 
 ## Features
@@ -131,7 +140,7 @@ Reproducible with [`scripts/audit-convex.sh`](scripts/audit-convex.sh).
 - **Decoupled, idempotent alert pipeline** — station fan-out index, per-watch budget, `queued → sending → sent → delivered/bounced/failed` state machine.
 - **Signed webhooks (HMAC-SHA256, timing-safe)** — AgentMail delivery advances the alert state machine; AgentMail inbound parses replies and can pause a watch; a partner lift-status feed lands advisory reports.
 - **Event bus** — idempotent publish + scheduler dispatch decouples producers from consumers.
-- **Emergency SOS service** — rate-limited, idempotent, and durably escalated if no one acknowledges in time.
+- **Emergency SOS service** — an in-app SOS modal (kind · details · contact) that is rate-limited, idempotent, durably escalated if no one acknowledges, with a traveller/operator note timeline.
 - **First-class idempotency** — a shared claim helper guards every ingress (webhooks, SOS, alerts, email codes).
 - **Session isolation** — one visitor's `/proof` drill never touches another's view or global state.
 - **Convex Auth** (password + username), **peppered OTP** email verification, and the **rate-limiter** on every entry point.
@@ -368,7 +377,7 @@ Enqueue and deliver are separate: accepting a candidate schedules `internal.aler
 
 ## Convex depth
 
-- **Full function surface:** **77 Convex functions** across **20 tables** and **55 indexes**, plus **2 durable workflows**, **2 workpools**, **4 HTTP webhook routes**, an **event bus**, and **first-class idempotency** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, `emergency`, `events`, `webhooks`, and more. See [`docs/architecture.md`](docs/architecture.md) for the full system design and the audited gap-map (`scripts/audit-convex.sh`).
+- **Full function surface:** **86 Convex functions** across **21 tables** and **56 indexes**, plus **2 durable workflows**, **2 workpools**, **4 HTTP webhook routes**, an **event bus**, and **first-class idempotency** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, `emergency`, `events`, `webhooks`, `ops`, and more. See [`docs/architecture.md`](docs/architecture.md) for the full system design and the audited gap-map (`scripts/audit-convex.sh`).
 - **Durable workflows (`@convex-dev/workflow`):** the 6-hour evidence run and the emergency escalation both run as durable, retryable, resumable workflows.
 - **Workpools (`@convex-dev/workpool`):** `extractionPool` bounds scrape/LLM concurrency; `deliveryPool` bounds outbound notifications.
 - **Event bus:** an idempotent `events` table with scheduler-driven dispatch decouples producers (reviewer accepts, lift restored, SOS raised, webhook received) from consumers.
@@ -381,7 +390,7 @@ Enqueue and deliver are separate: accepting a candidate schedules `internal.aler
 
 ## Data model
 
-Twenty tables. The routing and evidence tables are the heart of the system; the rest carry accounts, journeys, the alert pipeline, the event bus, idempotency, webhooks and the emergency service.
+Twenty-one tables. The routing and evidence tables are the heart of the system; the rest carry accounts, journeys, the alert pipeline, the event bus, idempotency, webhooks and the emergency service.
 
 ```mermaid
 erDiagram
@@ -414,6 +423,7 @@ erDiagram
 | `events` | Event bus log, idempotent on `dedupeKey`, scheduler-dispatched |
 | `idempotencyKeys` | First-class idempotency claims across every ingress |
 | `emergencies` | SOS lifecycle: raised → acknowledged → escalated → resolved |
+| `emergencyNotes` | Traveller/operator note timeline on an SOS |
 | `inboundMessages` | Parsed inbound email replies (intent + matched watch) |
 | `webhookReceipts` | Verified / duplicate / rejected webhook audit trail |
 

@@ -61,6 +61,12 @@ export function ProofConsole() {
   const [progress, setProgress] = useState(0);
   const [arrived, setArrived] = useState(false);
   const [immersive, setImmersive] = useState(false);
+  const [sosOpen, setSosOpen] = useState(false);
+  const [sosKind, setSosKind] = useState<
+    "stuck-no-lift" | "trapped-in-lift" | "needs-assistance"
+  >("stuck-no-lift");
+  const [sosNote, setSosNote] = useState("");
+  const [sosEmail, setSosEmail] = useState("");
 
   const stations = useQuery(api.routes.listStations) ?? [];
   const drill = useQuery(api.drill.state, sessionId ? { sessionId } : "skip");
@@ -79,6 +85,10 @@ export function ProofConsole() {
   const resetDrill = useMutation(api.drill.reset);
   const attemptForged = useMutation(api.drill.attemptForgedIncident);
   const requestAlert = useMutation(api.alerts.requestDrillAlert);
+  const raiseEmergency = useMutation(api.emergency.raise);
+  const cancelEmergency = useMutation(api.emergency.cancel);
+  const emergencies =
+    useQuery(api.emergency.forSession, sessionId ? { sessionId } : "skip") ?? [];
 
   const outageActive = drill?.outageActive ?? false;
   const rerouted = live?.status === "ready" ? live.rerouted : false;
@@ -91,6 +101,13 @@ export function ProofConsole() {
   const affectedStation = drill?.incident?.stationName ?? null;
   const fromName = baselineReady?.fromName ?? liveReady?.fromName ?? "Start";
   const toName = baselineReady?.toName ?? liveReady?.toName ?? "Destination";
+  const activeEmergency =
+    emergencies.find(
+      (e) =>
+        e.status === "raised" ||
+        e.status === "escalated" ||
+        e.status === "acknowledged",
+    ) ?? null;
 
   const reroutedVia = useMemo(() => {
     if (!rerouted || !liveReady || !baselineReady) return null;
@@ -149,6 +166,34 @@ export function ProofConsole() {
   const onJourneyEnd = useCallback(() => {
     setArrived(true);
   }, []);
+
+  const submitSos = async () => {
+    if (!sessionId) return;
+    setBusy("sos");
+    try {
+      await raiseEmergency({
+        sessionId,
+        kind: sosKind,
+        stationSlug: disruptionTarget ?? to,
+        ...(sosNote.trim() ? { note: sosNote.trim() } : {}),
+        ...(sosEmail.trim() ? { contactEmail: sosEmail.trim() } : {}),
+      });
+      setSosOpen(false);
+      setSosNote("");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onCancelSos = async () => {
+    if (!sessionId || !activeEmergency) return;
+    setBusy("sos");
+    try {
+      await cancelEmergency({ emergencyId: activeEmergency._id, sessionId });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const runGuards = useCallback(async () => {
     if (!sessionId) return;
@@ -394,6 +439,40 @@ export function ProofConsole() {
             Immersive third-person view
             <span className="proof-toggle-state">{immersive ? "On" : "Off"}</span>
           </button>
+
+          {activeEmergency ? (
+            <div className={`proof-sos-card is-${activeEmergency.status}`}>
+              <div className="proof-sos-head">
+                <span className="proof-sos-dot" aria-hidden="true" />
+                SOS · {activeEmergency.status}
+              </div>
+              <p>
+                {activeEmergency.status === "escalated"
+                  ? "No response in time — escalated to station staff."
+                  : activeEmergency.status === "acknowledged"
+                    ? "Acknowledged — help is on the way."
+                    : "Raised. Auto-escalates if no one responds shortly."}
+              </p>
+              <button
+                type="button"
+                className="proof-button is-slim is-ghost"
+                onClick={onCancelSos}
+                disabled={busy !== null}
+              >
+                I&rsquo;m OK — cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="proof-sos"
+              onClick={() => setSosOpen(true)}
+              disabled={!sessionId}
+            >
+              <BellRing aria-hidden="true" />
+              I&rsquo;m stuck — send SOS
+            </button>
+          )}
         </div>
 
         {directions.length > 0 ? (
@@ -622,6 +701,79 @@ export function ProofConsole() {
           ) : null}
         </div>
       </div>
+
+      {sosOpen ? (
+        <div
+          className="proof-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Send an SOS"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && busy !== "sos") setSosOpen(false);
+          }}
+        >
+          <div className="proof-modal">
+            <h2 className="proof-modal-title">
+              <BellRing aria-hidden="true" /> Send an SOS
+            </h2>
+            <p className="proof-modal-lede">
+              This pages station staff and auto-escalates if no one responds.
+              Share anything that helps them reach you.
+            </p>
+            <label className="proof-field">
+              <span>What&rsquo;s happening?</span>
+              <select
+                value={sosKind}
+                onChange={(e) =>
+                  setSosKind(e.target.value as typeof sosKind)
+                }
+              >
+                <option value="stuck-no-lift">Stuck — no working lift</option>
+                <option value="trapped-in-lift">Trapped in a lift</option>
+                <option value="needs-assistance">Need assistance</option>
+              </select>
+            </label>
+            <label className="proof-field">
+              <span>Details (optional)</span>
+              <textarea
+                value={sosNote}
+                onChange={(e) => setSosNote(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="e.g. On the eastbound platform; the lift by exit 3 is dark."
+              />
+            </label>
+            <label className="proof-field">
+              <span>Email for updates (optional)</span>
+              <input
+                type="email"
+                value={sosEmail}
+                onChange={(e) => setSosEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+            <div className="proof-modal-actions">
+              <button
+                type="button"
+                className="proof-button is-slim is-ghost"
+                onClick={() => setSosOpen(false)}
+                disabled={busy === "sos"}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="proof-sos is-inline"
+                onClick={submitSos}
+                disabled={busy === "sos" || !sessionId}
+              >
+                <BellRing aria-hidden="true" />
+                {busy === "sos" ? "Sending…" : "Send SOS"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

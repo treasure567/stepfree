@@ -8,9 +8,9 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
 | Capability | Count / detail | Where |
 | --- | --- | --- |
-| Convex functions | **77** (20 public queries, 18 public mutations, 3 public actions, 36 internal) | across `convex/*.ts` |
-| Tables | **20** | `convex/schema.ts` |
-| Indexes | **55** | every table fully indexed; no full scans |
+| Convex functions | **86** (23 public queries, 21 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
+| Tables | **21** | `convex/schema.ts` |
+| Indexes | **56** | every table fully indexed; no full scans |
 | Mounted components | **5** (auth, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
 | Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
 | Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
@@ -18,9 +18,9 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 | Webhook signature verification | **HMAC-SHA256, timing-safe** | `convex/lib/webhookAuth.ts` |
 | Event bus | idempotent publish on `dedupeKey` + scheduler dispatch | `convex/events.ts` |
 | Idempotency | first-class claim helper, used by every ingress | `convex/lib/idempotency.ts` |
-| Crons | **3** (TfL sync, evidence workflow, cleanup) | `convex/crons.ts` |
-| Emergency service | SOS → event → durable escalation | `convex/emergency.ts` |
-| Automated tests | **54** across 10 files | `convex/**/*.test.ts` |
+| Crons | **4** (TfL sync, evidence workflow, cleanup, stuck-alert reconcile) | `convex/crons.ts` |
+| Emergency service | SOS modal → event → durable escalation → notes | `convex/emergency.ts` |
+| Automated tests | **62** across 12 files | `convex/**/*.test.ts` |
 
 **Foundational guarantees:** deterministic Dijkstra routing behind a human-review gate, Convex Auth, the rate-limiter on every ingress, verbatim-excerpt evidence verification, and per-session isolation.
 

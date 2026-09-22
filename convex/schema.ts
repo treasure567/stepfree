@@ -389,6 +389,8 @@ export default defineSchema({
     escalatedAt: v.optional(v.number()),
     acknowledgedBy: v.optional(v.string()),
     acknowledgedAt: v.optional(v.number()),
+    assignedTo: v.optional(v.string()),
+    reopenedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
     idempotencyKey: v.string(),
     createdAt: v.number(),
@@ -399,6 +401,13 @@ export default defineSchema({
     .index("by_station", ["stationId"])
     .index("by_idempotency", ["idempotencyKey"])
     .index("by_created_at", ["createdAt"]),
+  emergencyNotes: defineTable({
+    emergencyId: v.id("emergencies"),
+    author: v.string(),
+    authorKind: v.union(v.literal("traveller"), v.literal("operator")),
+    text: v.string(),
+    createdAt: v.number(),
+  }).index("by_emergency", ["emergencyId"]),
   inboundMessages: defineTable({
     source: v.literal("agentmail"),
     providerMessageId: v.string(),

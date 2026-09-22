@@ -65,7 +65,7 @@
   <text class="sub" x="620" y="502">decoupled sends · 3 cron jobs</text>
   <rect class="db" x="828" y="458" width="352" height="62" rx="12"/>
   <text class="title" x="1004" y="483">Database</text>
-  <text class="sub" x="1004" y="502">20 tables · 55 indexes</text>
+  <text class="sub" x="1004" y="502">21 tables · 56 indexes</text>
 
   <rect class="box" x="60" y="536" width="352" height="62" rx="12"/>
   <text class="title" x="236" y="561">Workflows ×2</text>

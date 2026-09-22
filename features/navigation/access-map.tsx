@@ -25,7 +25,95 @@ type AccessMapProps = {
   userLocation: Coordinate | null;
   selectionMode: SelectionMode;
   onMapPick: (coordinate: Coordinate) => void;
+  journeying?: boolean;
+  speed?: number;
+  immersive?: boolean;
+  onJourneyProgress?: (fraction: number) => void;
+  onJourneyEnd?: () => void;
 };
+
+const JOURNEY_BASE_SECONDS = 32;
+const JOURNEY_FOLLOW_ZOOM = 15;
+const JOURNEY_IMMERSIVE_PITCH = 68;
+const JOURNEY_IMMERSIVE_ZOOM = 17;
+const JOURNEY_LOOKAHEAD = 0.04;
+const JOURNEY_EASE = 0.1;
+
+type JourneyGeo = {
+  coords: Array<[number, number]>;
+  cum: number[];
+  total: number;
+};
+
+function lerp(from: number, to: number, t: number) {
+  return from + (to - from) * t;
+}
+
+function haversine(a: [number, number], b: [number, number]) {
+  const R = 6371000;
+  const dLat = ((b[1] - a[1]) * Math.PI) / 180;
+  const dLng = ((b[0] - a[0]) * Math.PI) / 180;
+  const la1 = (a[1] * Math.PI) / 180;
+  const la2 = (b[1] * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function buildJourneyGeo(coords: Array<[number, number]>): JourneyGeo {
+  const cum = [0];
+  for (let i = 1; i < coords.length; i += 1) {
+    cum.push(cum[i - 1] + haversine(coords[i - 1], coords[i]));
+  }
+  return { coords, cum, total: cum[cum.length - 1] ?? 0 };
+}
+
+function journeySegment(geo: JourneyGeo, t: number) {
+  const d = Math.min(Math.max(t, 0), 1) * geo.total;
+  let i = 1;
+  while (i < geo.cum.length && geo.cum[i] < d) i += 1;
+  if (i >= geo.coords.length) i = geo.coords.length - 1;
+  const segStart = geo.cum[i - 1];
+  const segEnd = geo.cum[i];
+  const f = segEnd > segStart ? (d - segStart) / (segEnd - segStart) : 0;
+  return { a: geo.coords[i - 1], b: geo.coords[i], f };
+}
+
+function journeyPosition(geo: JourneyGeo, t: number): [number, number] {
+  if (geo.coords.length === 1) return geo.coords[0];
+  const { a, b, f } = journeySegment(geo, t);
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+}
+
+function journeyBearing(geo: JourneyGeo, t: number) {
+  if (geo.coords.length < 2) return 0;
+  const { a, b } = journeySegment(geo, t);
+  const dLng = ((b[0] - a[0]) * Math.PI) / 180;
+  const la1 = (a[1] * Math.PI) / 180;
+  const la2 = (b[1] * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(la2);
+  const x =
+    Math.cos(la1) * Math.sin(la2) -
+    Math.sin(la1) * Math.cos(la2) * Math.cos(dLng);
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
+function angleDelta(from: number, to: number) {
+  return ((to - from + 540) % 360) - 180;
+}
+
+function wheelchairElement() {
+  const el = document.createElement("div");
+  el.className = "nav-wheelchair";
+  const ring = document.createElement("span");
+  ring.className = "nav-wheelchair-ring";
+  const dot = document.createElement("span");
+  dot.className = "nav-wheelchair-dot";
+  dot.textContent = "♿";
+  el.append(ring, dot);
+  return el;
+}
 
 function routeData(coordinates: Coordinate[]) {
   if (coordinates.length < 2) {
@@ -87,6 +175,11 @@ export function AccessMap({
   userLocation,
   selectionMode,
   onMapPick,
+  journeying = false,
+  speed = 2,
+  immersive = false,
+  onJourneyProgress,
+  onJourneyEnd,
 }: AccessMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -95,6 +188,15 @@ export function AccessMap({
   const lastMapPickAtRef = useRef(0);
   const selectionModeRef = useRef(selectionMode);
   const onMapPickRef = useRef(onMapPick);
+  const animRef = useRef<number | null>(null);
+  const progressRef = useRef(0);
+  const lastTsRef = useRef(0);
+  const camZoomRef = useRef(JOURNEY_FOLLOW_ZOOM);
+  const camPitchRef = useRef(0);
+  const camBearingRef = useRef(0);
+  const wheelchairRef = useRef<Marker | null>(null);
+  const journeyRef = useRef({ mode, transitRoute, streetRoute, speed, immersive });
+  const journeyCbRef = useRef({ onJourneyProgress, onJourneyEnd });
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState("");
 
@@ -102,6 +204,19 @@ export function AccessMap({
     selectionModeRef.current = selectionMode;
     onMapPickRef.current = onMapPick;
   }, [onMapPick, selectionMode]);
+
+  useEffect(() => {
+    journeyRef.current = { mode, transitRoute, streetRoute, speed, immersive };
+    journeyCbRef.current = { onJourneyProgress, onJourneyEnd };
+  }, [
+    mode,
+    transitRoute,
+    streetRoute,
+    speed,
+    immersive,
+    onJourneyProgress,
+    onJourneyEnd,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -129,6 +244,7 @@ export function AccessMap({
           zoom: 12.3,
           pitch: 0,
           bearing: 0,
+          maxPitch: 80,
           attributionControl: false,
           style: {
             version: 8,
@@ -442,6 +558,110 @@ export function AccessMap({
     transitRoute,
     userLocation,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = maplibreRef.current;
+    if (!mapReady || !map || !maplibre) return;
+
+    const activeCoords: Array<[number, number]> =
+      journeyRef.current.mode === "transit"
+        ? journeyRef.current.transitRoute.map(
+            (s) => [s.longitude, s.latitude] as [number, number],
+          )
+        : (journeyRef.current.streetRoute?.geometry ?? []).map(
+            (c) => [c.longitude, c.latitude] as [number, number],
+          );
+
+    if (!journeying) {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+      progressRef.current = 0;
+      wheelchairRef.current?.remove();
+      wheelchairRef.current = null;
+      if (activeCoords.length > 1) {
+        map.jumpTo({ pitch: 0, bearing: 0 });
+        const bounds = new maplibre.LngLatBounds(
+          activeCoords[0],
+          activeCoords[0],
+        );
+        for (const c of activeCoords.slice(1)) bounds.extend(c);
+        map.fitBounds(bounds, {
+          padding:
+            window.innerWidth < 760
+              ? { top: 110, right: 36, bottom: 390, left: 36 }
+              : { top: 100, right: 70, bottom: 70, left: 470 },
+          duration: 700,
+          maxZoom: 16,
+        });
+      }
+      return;
+    }
+
+    if (activeCoords.length < 2) return;
+    const geo = buildJourneyGeo(activeCoords);
+    progressRef.current = 0;
+    lastTsRef.current = 0;
+    camZoomRef.current = map.getZoom();
+    camPitchRef.current = map.getPitch();
+    camBearingRef.current = map.getBearing();
+    const marker = new maplibre.Marker({
+      element: wheelchairElement(),
+      anchor: "center",
+    })
+      .setLngLat(geo.coords[0])
+      .addTo(map);
+    wheelchairRef.current = marker;
+
+    const step = (ts: number) => {
+      if (!lastTsRef.current) lastTsRef.current = ts;
+      const dt = ts - lastTsRef.current;
+      lastTsRef.current = ts;
+      progressRef.current = Math.min(
+        1,
+        progressRef.current +
+          (dt / 1000 / JOURNEY_BASE_SECONDS) * journeyRef.current.speed,
+      );
+      const t = progressRef.current;
+      const pos = journeyPosition(geo, t);
+      marker.setLngLat(pos);
+
+      const imm = journeyRef.current.immersive;
+      const targetBearing = imm ? journeyBearing(geo, t) : 0;
+      const targetPitch = imm ? JOURNEY_IMMERSIVE_PITCH : 0;
+      const targetZoom = imm ? JOURNEY_IMMERSIVE_ZOOM : JOURNEY_FOLLOW_ZOOM;
+      camPitchRef.current = lerp(camPitchRef.current, targetPitch, JOURNEY_EASE);
+      camZoomRef.current = lerp(camZoomRef.current, targetZoom, JOURNEY_EASE);
+      camBearingRef.current =
+        (camBearingRef.current +
+          angleDelta(camBearingRef.current, targetBearing) * JOURNEY_EASE +
+          360) %
+        360;
+      const center = imm
+        ? journeyPosition(geo, Math.min(1, t + JOURNEY_LOOKAHEAD))
+        : pos;
+      map.jumpTo({
+        center,
+        bearing: camBearingRef.current,
+        pitch: camPitchRef.current,
+        zoom: camZoomRef.current,
+      });
+
+      journeyCbRef.current.onJourneyProgress?.(t);
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(step);
+      } else {
+        animRef.current = null;
+        journeyCbRef.current.onJourneyEnd?.();
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+    };
+  }, [mapReady, journeying]);
 
   return (
     <div className="access-map-shell">

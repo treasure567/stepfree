@@ -5,7 +5,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { getSessionId } from "@/shared/lib/session";
-import { CircleUserRound, Radio, Route, ScanLine } from "lucide-react";
+import {
+  CircleUserRound,
+  Orbit,
+  Play,
+  Radio,
+  Route,
+  ScanLine,
+  Square,
+} from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { AccessMap } from "@/features/navigation/access-map";
 import { StreetRoutePanel } from "@/features/navigation/street-route-panel";
@@ -39,19 +47,57 @@ export function NavigatorScreen() {
   const [streetRoute, setStreetRoute] = useState<StreetRoute | null>(null);
   const [transitRoute, setTransitRoute] = useState<Station[]>([]);
   const [guidanceActive, setGuidanceActive] = useState(false);
+  const [journeying, setJourneying] = useState(false);
+  const [journeySpeed, setJourneySpeed] = useState(2);
+  const [journeyImmersive, setJourneyImmersive] = useState(false);
+  const [journeyProgress, setJourneyProgress] = useState(0);
+  const [journeyArrived, setJourneyArrived] = useState(false);
   const location = useLiveLocation();
 
-  const changeStreetRoute = useCallback((route: StreetRoute | null) => {
-    setStreetRoute(route);
-    setSelectionMode(null);
-    setGuidanceActive(false);
+  const stopJourney = useCallback(() => {
+    setJourneying(false);
+    setJourneyArrived(false);
+    setJourneyProgress(0);
   }, []);
 
-  const changeTransitRoute = useCallback((route: Station[]) => {
-    setTransitRoute(route);
-  }, []);
+  const changeStreetRoute = useCallback(
+    (route: StreetRoute | null) => {
+      setStreetRoute(route);
+      setSelectionMode(null);
+      setGuidanceActive(false);
+      stopJourney();
+    },
+    [stopJourney],
+  );
+
+  const changeTransitRoute = useCallback(
+    (route: Station[]) => {
+      setTransitRoute(route);
+      stopJourney();
+    },
+    [stopJourney],
+  );
+
+  const onJourneyProgress = useCallback(
+    (fraction: number) => setJourneyProgress(fraction),
+    [],
+  );
+  const onJourneyEnd = useCallback(() => setJourneyArrived(true), []);
+
+  const journeyReady =
+    mode === "transit"
+      ? transitRoute.length > 1
+      : (streetRoute?.geometry.length ?? 0) > 1;
+
+  function startJourney() {
+    if (!journeyReady) return;
+    setJourneyArrived(false);
+    setJourneyProgress(0);
+    setJourneying(true);
+  }
 
   function changeMode(nextMode: "street" | "transit") {
+    stopJourney();
     setMode(nextMode);
     setSelectionMode(nextMode === "street" ? "origin" : null);
     window.history.replaceState(
@@ -74,6 +120,7 @@ export function NavigatorScreen() {
 
     setStreetRoute(null);
     setGuidanceActive(false);
+    stopJourney();
   }
 
   function changeOrigin(coordinate: Coordinate) {
@@ -108,6 +155,11 @@ export function NavigatorScreen() {
         userLocation={location.coordinate}
         selectionMode={mode === "street" ? selectionMode : null}
         onMapPick={pickMapPoint}
+        journeying={journeying}
+        speed={journeySpeed}
+        immersive={journeyImmersive}
+        onJourneyProgress={onJourneyProgress}
+        onJourneyEnd={onJourneyEnd}
       />
 
       <header className="navigator-topbar">
@@ -170,6 +222,61 @@ export function NavigatorScreen() {
             onRouteChange={changeTransitRoute}
           />
         )}
+
+        {journeyReady ? (
+          <div className="navigator-journey">
+            <div className="navigator-journey-head">
+              <span>Wheelchair journey</span>
+              {journeying ? (
+                <span className="navigator-journey-progress">
+                  {journeyArrived
+                    ? "Arrived ✓"
+                    : `en route · ${Math.round(journeyProgress * 100)}%`}
+                </span>
+              ) : null}
+            </div>
+            <div className="navigator-journey-controls">
+              {!journeying ? (
+                <button
+                  type="button"
+                  className="navigator-journey-button"
+                  onClick={startJourney}
+                >
+                  <Play aria-hidden="true" /> Start journey
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="navigator-journey-button is-ghost"
+                  onClick={stopJourney}
+                >
+                  <Square aria-hidden="true" /> Stop
+                </button>
+              )}
+              <label className="navigator-journey-speed">
+                <span>{journeySpeed}× speed</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={6}
+                  step={0.5}
+                  value={journeySpeed}
+                  onChange={(e) => setJourneySpeed(Number(e.target.value))}
+                  aria-label="Journey speed"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              className={`navigator-journey-toggle ${journeyImmersive ? "is-on" : ""}`}
+              onClick={() => setJourneyImmersive((v) => !v)}
+              aria-pressed={journeyImmersive}
+            >
+              <Orbit aria-hidden="true" /> Immersive third-person view
+              <span>{journeyImmersive ? "On" : "Off"}</span>
+            </button>
+          </div>
+        ) : null}
       </section>
     </main>
   );

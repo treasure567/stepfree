@@ -103,6 +103,7 @@ export default function Home() {
             <Link href="#story">The journey</Link>
             <Link href="#system">How it works</Link>
             <Link href="#principles">Our standard</Link>
+            <Link href="/proof">Live proof</Link>
             <Link href="/account">Your profile</Link>
           </div>
 
@@ -129,6 +130,10 @@ export default function Home() {
               <Link className="primary-button" href="#planner">
                 Plan a step-free route
                 <ArrowDown aria-hidden="true" />
+              </Link>
+              <Link className="text-button" href="/proof">
+                Watch a lift break, live
+                <Radio aria-hidden="true" />
               </Link>
               <Link className="text-button" href="#story">
                 See Maya&apos;s journey

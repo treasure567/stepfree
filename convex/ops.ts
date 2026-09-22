@@ -30,3 +30,30 @@ export const cleanupExpired = internalMutation({
     return { deleted };
   },
 });
+
+const STUCK_ALERT_MS = 1000 * 60 * 5;
+
+export const reconcileStuckAlerts = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ requeued: number }> => {
+    const cutoff = Date.now() - STUCK_ALERT_MS;
+    const sending = await ctx.db
+      .query("alerts")
+      .withIndex("by_status", (q) => q.eq("status", "sending"))
+      .take(50);
+    let requeued = 0;
+    for (const alert of sending) {
+      if (alert.updatedAt < cutoff) {
+        await ctx.db.patch(alert._id, {
+          status: "queued",
+          updatedAt: Date.now(),
+        });
+        await ctx.scheduler.runAfter(0, internal.alerts.deliverAlert, {
+          alertId: alert._id,
+        });
+        requeued += 1;
+      }
+    }
+    return { requeued };
+  },
+});

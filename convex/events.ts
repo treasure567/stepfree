@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { deliveryPool } from "./pools";
 
@@ -93,5 +93,44 @@ export const byType = query({
       .withIndex("by_type_and_created", (q) => q.eq("type", args.type))
       .order("desc")
       .take(limit);
+  },
+});
+
+export const failed = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 30, 100);
+    return await ctx.db
+      .query("events")
+      .withIndex("by_status", (q) => q.eq("status", "failed"))
+      .order("desc")
+      .take(limit);
+  },
+});
+
+export const pending = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 50, 200);
+    return await ctx.db
+      .query("events")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .order("asc")
+      .take(limit);
+  },
+});
+
+export const retry = internalMutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args): Promise<{ retried: boolean }> => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event || event.status !== "failed") {
+      return { retried: false };
+    }
+    await ctx.db.patch(args.eventId, { status: "pending" });
+    await ctx.scheduler.runAfter(0, internal.events.dispatch, {
+      eventId: args.eventId,
+    });
+    return { retried: true };
   },
 });

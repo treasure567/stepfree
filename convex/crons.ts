@@ -24,4 +24,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "reconcile stuck alerts",
+  { minutes: 15 },
+  internal.ops.reconcileStuckAlerts,
+  {},
+);
+
 export default crons;

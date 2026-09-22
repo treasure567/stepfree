@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/core";
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -285,5 +286,109 @@ export const deliverNotification = internalAction({
       reason: args.reason,
     });
     return null;
+  },
+});
+
+export const addNote = mutation({
+  args: {
+    emergencyId: v.id("emergencies"),
+    text: v.string(),
+    sessionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const emergency = await ctx.db.get(args.emergencyId);
+    if (!emergency) {
+      throw new ConvexError({ code: "EMERGENCY_NOT_FOUND" });
+    }
+    const trimmed = args.text.trim();
+    if (trimmed.length === 0 || trimmed.length > 500) {
+      throw new ConvexError({ code: "INVALID_NOTE" });
+    }
+    let author: string;
+    let authorKind: "traveller" | "operator";
+    if (args.sessionId && args.sessionId === emergency.sessionId) {
+      author = `session:${args.sessionId}`;
+      authorKind = "traveller";
+    } else {
+      author = await requireOps(ctx);
+      authorKind = "operator";
+    }
+    await ctx.db.insert("emergencyNotes", {
+      emergencyId: args.emergencyId,
+      author,
+      authorKind,
+      text: trimmed,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(args.emergencyId, { updatedAt: Date.now() });
+    return { added: true, authorKind };
+  },
+});
+
+export const notesFor = query({
+  args: { emergencyId: v.id("emergencies") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("emergencyNotes")
+      .withIndex("by_emergency", (q) => q.eq("emergencyId", args.emergencyId))
+      .order("desc")
+      .take(50);
+  },
+});
+
+export const assign = mutation({
+  args: { emergencyId: v.id("emergencies") },
+  handler: async (ctx, args) => {
+    const operator = await requireOps(ctx);
+    const emergency = await ctx.db.get(args.emergencyId);
+    if (!emergency) {
+      throw new ConvexError({ code: "EMERGENCY_NOT_FOUND" });
+    }
+    await ctx.db.patch(args.emergencyId, {
+      assignedTo: operator,
+      updatedAt: Date.now(),
+    });
+    return { assignedTo: operator };
+  },
+});
+
+export const reopen = mutation({
+  args: { emergencyId: v.id("emergencies") },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const emergency = await ctx.db.get(args.emergencyId);
+    if (!emergency) {
+      throw new ConvexError({ code: "EMERGENCY_NOT_FOUND" });
+    }
+    if (emergency.status !== "resolved" && emergency.status !== "cancelled") {
+      return { status: emergency.status };
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.emergencyId, {
+      status: "raised",
+      reopenedAt: now,
+      updatedAt: now,
+    });
+    await publishEvent(ctx, {
+      type: "emergency.raised",
+      dedupeKey: `emergency.reopened:${args.emergencyId}:${now}`,
+      data: { emergencyId: args.emergencyId },
+    });
+    await ctx.runMutation(internal.workflows.startEmergencyEscalation, {
+      emergencyId: args.emergencyId,
+      windowMs: ESCALATION_WINDOW_MS,
+    });
+    return { status: "raised" as const };
+  },
+});
+
+export const history = query({
+  args: { sessionId: v.string(), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("emergencies")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });

@@ -49,4 +49,25 @@ describe("event bus", () => {
     expect(event?.status).toBe("dispatched");
     expect(event?.dispatchedAt).toBeTypeOf("number");
   });
+
+  test("retry re-queues a failed event exactly once", async () => {
+    const t = convexTest(schema, modules);
+    const eventId = await t.run(async (ctx) =>
+      ctx.db.insert("events", {
+        type: "route.changed",
+        dedupeKey: "failed-1",
+        data: {},
+        status: "failed",
+        attempts: 1,
+        createdAt: Date.now(),
+      }),
+    );
+    const first = await t.mutation(internal.events.retry, { eventId });
+    expect(first.retried).toBe(true);
+    const requeued = await t.run(async (ctx) => ctx.db.get(eventId));
+    expect(requeued?.status).toBe("pending");
+
+    const second = await t.mutation(internal.events.retry, { eventId });
+    expect(second.retried).toBe(false);
+  });
 });
