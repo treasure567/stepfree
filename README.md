@@ -1,5 +1,13 @@
 # StepFree developer guide
 
+[![CI](https://github.com/treasure567/stepfree/actions/workflows/ci.yml/badge.svg)](https://github.com/treasure567/stepfree/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-109%20passing-2ea043)
+![Convex handlers](https://img.shields.io/badge/Convex%20handlers-117-8a63f4)
+![Backend](https://img.shields.io/badge/backend-Convex-8a63f4)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 StepFree is a Next.js 16 application backed entirely by Convex. This document is for running, testing, and deploying the repository.
 
 For the product story, production evidence, architecture diagrams, sponsor integrations, safety model, and linked build log, read [`hackathon.md`](hackathon.md).
