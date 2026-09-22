@@ -12,7 +12,6 @@ import {
   Activity,
   AlertTriangle,
   BellRing,
-  CheckCircle2,
   LayoutGrid,
   LoaderCircle,
   Mail,
@@ -896,9 +895,6 @@ export function OpsConsole() {
             <h1>{active.label}</h1>
             <p className="ops-header-desc">{active.desc}</p>
           </div>
-          <span className="ops-operator">
-            <CheckCircle2 aria-hidden="true" /> {profile?.displayName ?? "Operator"}
-          </span>
         </header>
         <div className="ops-content">{views[section]}</div>
       </main>

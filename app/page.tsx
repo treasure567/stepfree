@@ -104,6 +104,7 @@ export default function Home() {
             <Link href="#system">How it works</Link>
             <Link href="#principles">Our standard</Link>
             <Link href="/proof">Live proof</Link>
+            <Link href="/ops">Ops console</Link>
             <Link href="/account">Your profile</Link>
           </div>
 
@@ -318,6 +319,8 @@ export default function Home() {
         <div>
           <Link href="#principles">Accessibility</Link>
           <Link href="#system">How it works</Link>
+          <Link href="/proof">Live proof</Link>
+          <Link href="/ops">Ops console</Link>
           <Link href="/account">Profile</Link>
         </div>
       </footer>

@@ -228,6 +228,28 @@ export const ingestPartnerLiftStatus = internalMutation({
   },
 });
 
+export const ingestAgentmailEvent = internalMutation({
+  args: {
+    eventId: v.string(),
+    eventType: v.string(),
+    payload: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const outcome = await recordReceipt(
+      ctx,
+      `agentmail-${args.eventType}`,
+      args.eventId,
+      true,
+      {
+        payload: args.payload,
+        eventType: args.eventType,
+        summary: `AgentMail event: ${args.eventType}`,
+      },
+    );
+    return { duplicate: outcome === "duplicate" };
+  },
+});
+
 async function requireOps(ctx: QueryCtx): Promise<string> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {

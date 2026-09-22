@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { registerStaticPageRoutes } from "./lib/staticPages";
 import { verifyHmacSignature } from "./lib/webhookAuth";
+import { readSvixHeaders, verifySvixSignature } from "./lib/svix";
 
 const http = httpRouter();
 
@@ -20,6 +21,39 @@ function stringField(body: Record<string, unknown>, ...keys: string[]): string |
     if (typeof value === "string" && value.length > 0) {
       return value;
     }
+  }
+  return null;
+}
+
+function pick(source: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function extractEmail(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value.includes("@") ? value : null;
+  }
+  const obj = asObject(value);
+  if (obj) {
+    return asString(pick(obj, "email", "address"));
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    return extractEmail(value[0]);
   }
   return null;
 }
@@ -58,71 +92,78 @@ http.route({
 });
 
 http.route({
-  path: "/webhooks/agentmail/delivery",
+  path: "/webhooks/agentmail",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    const check = await readVerified(req, "AGENTMAIL_WEBHOOK_SECRET");
-    if (!check.ok) {
-      return check.response;
+    const raw = await req.text();
+    const svix = readSvixHeaders(req.headers);
+    const secret = process.env.AGENTMAIL_WEBHOOK_SECRET ?? "";
+    const valid = await verifySvixSignature({ secret, payload: raw, headers: svix });
+    if (!valid) {
+      return new Response("invalid signature", { status: 401 });
     }
-    const eventId = stringField(check.body, "eventId", "id");
-    const providerMessageId = stringField(
-      check.body,
-      "messageId",
-      "providerMessageId",
-    );
-    const rawOutcome = stringField(check.body, "event", "outcome", "type");
-    const outcome =
-      rawOutcome === "delivered"
-        ? "delivered"
-        : rawOutcome === "bounced" || rawOutcome === "bounce"
-          ? "bounced"
-          : null;
-    if (!eventId || !providerMessageId || !outcome) {
-      return new Response("missing fields", { status: 400 });
-    }
-    const result = await ctx.runMutation(
-      internal.webhooks.ingestAgentmailDelivery,
-      { eventId, providerMessageId, outcome, payload: JSON.stringify(check.body) },
-    );
-    return jsonResponse({ ok: true, ...result });
-  }),
-});
 
-http.route({
-  path: "/webhooks/agentmail/inbound",
-  method: "POST",
-  handler: httpAction(async (ctx, req) => {
-    const check = await readVerified(req, "AGENTMAIL_WEBHOOK_SECRET");
-    if (!check.ok) {
-      return check.response;
+    let body: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || parsed === null) {
+        throw new Error("not an object");
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return new Response("invalid json", { status: 400 });
     }
-    const eventId = stringField(check.body, "eventId", "id");
-    const providerMessageId = stringField(
-      check.body,
-      "messageId",
-      "providerMessageId",
-    );
-    const fromEmail = stringField(check.body, "from", "fromEmail");
-    if (!eventId || !providerMessageId || !fromEmail) {
-      return new Response("missing fields", { status: 400 });
+
+    const eventType = (
+      asString(pick(body, "type", "event", "event_type")) ?? "unknown"
+    ).toLowerCase();
+    const message = asObject(pick(body, "message", "data")) ?? body;
+    const eventId = asString(pick(body, "id", "eventId")) ?? svix.id!;
+    const providerMessageId =
+      asString(pick(message, "message_id", "messageId", "id")) ?? eventId;
+    const payload = JSON.stringify(body);
+
+    if (eventType.includes("received") || eventType.includes("inbound")) {
+      const fromEmail = extractEmail(
+        pick(message, "from", "from_email", "fromEmail", "sender"),
+      );
+      if (!fromEmail) {
+        return new Response("missing sender", { status: 400 });
+      }
+      const result = await ctx.runMutation(
+        internal.webhooks.ingestAgentmailInbound,
+        {
+          eventId,
+          providerMessageId,
+          fromEmail,
+          subject: asString(pick(message, "subject")) ?? undefined,
+          text: asString(pick(message, "text", "body", "preview")) ?? undefined,
+          threadId:
+            asString(pick(message, "thread_id", "threadId")) ?? undefined,
+          payload,
+        },
+      );
+      return jsonResponse({ ok: true, type: eventType, ...result });
     }
-    const subject = stringField(check.body, "subject") ?? undefined;
-    const text = stringField(check.body, "text", "body") ?? undefined;
-    const threadId = stringField(check.body, "threadId") ?? undefined;
-    const result = await ctx.runMutation(
-      internal.webhooks.ingestAgentmailInbound,
-      {
-        eventId,
-        providerMessageId,
-        fromEmail,
-        subject,
-        text,
-        threadId,
-        payload: JSON.stringify(check.body),
-      },
-    );
-    return jsonResponse({ ok: true, ...result });
+
+    if (
+      eventType.includes("delivered") ||
+      eventType.includes("bounce")
+    ) {
+      const outcome = eventType.includes("bounce") ? "bounced" : "delivered";
+      const result = await ctx.runMutation(
+        internal.webhooks.ingestAgentmailDelivery,
+        { eventId, providerMessageId, outcome, payload },
+      );
+      return jsonResponse({ ok: true, type: eventType, ...result });
+    }
+
+    const result = await ctx.runMutation(internal.webhooks.ingestAgentmailEvent, {
+      eventId,
+      eventType,
+      payload,
+    });
+    return jsonResponse({ ok: true, type: eventType, ...result });
   }),
 });
 

@@ -14,8 +14,8 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 | Mounted component instances | **8** (auth core, password, username, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
 | Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
 | Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
-| HTTP routes | **4** (AgentMail delivery + inbound, partner lift-status, health) | `convex/http.ts` |
-| Webhook signature verification | timing-safe HMAC-SHA256 for the partner endpoint; AgentMail Svix adapter still pending | `convex/lib/webhookAuth.ts`, `convex/http.ts` |
+| HTTP routes | **3** (AgentMail unified webhook, partner lift-status, health) | `convex/http.ts` |
+| Webhook signature verification | Svix (svix-id/timestamp/signature, base64 HMAC-SHA256, replay window) for AgentMail; timing-safe HMAC-SHA256 for the partner endpoint | `convex/lib/svix.ts`, `convex/lib/webhookAuth.ts`, `convex/http.ts` |
 | Event record | idempotent publish on `dedupeKey`; the current meaningful consumer handles emergency notifications | `convex/events.ts` |
 | Idempotency | first-class claim helper, used by every ingress | `convex/lib/idempotency.ts` |
 | Crons | **4** (TfL sync, evidence workflow, cleanup, stuck-alert reconcile) | `convex/crons.ts` |
@@ -81,7 +81,7 @@ flowchart LR
 
 ## Webhook ingress status
 
-The partner lift-status endpoint verifies a timing-safe HMAC-SHA256 signature, deduplicates the provider event ID, and reduces the request to an internal mutation. The two AgentMail endpoints currently reuse that generic envelope. AgentMail uses Svix headers and nested payloads, so those endpoints are not production-verified until the adapter is replaced and tested against real events.
+The partner lift-status endpoint verifies a timing-safe HMAC-SHA256 signature, deduplicates the provider event ID, and reduces the request to an internal mutation. AgentMail posts to a single unified endpoint (`/webhooks/agentmail`) that verifies Svix signatures — `svix-id`, `svix-timestamp` and `svix-signature`, base64 HMAC-SHA256 over `id.timestamp.body` with a replay-tolerance window — then routes by event type: `message.received` to the inbound handler, `message.delivered`/`bounced` to the delivery handler, and every other type to a telemetry receipt. Enabling live traffic only needs the AgentMail signing secret set as `AGENTMAIL_WEBHOOK_SECRET`.
 
 ```mermaid
 sequenceDiagram
@@ -106,7 +106,7 @@ sequenceDiagram
     end
 ```
 
-The generic delivery handler can advance an alert to `delivered` or `bounced` by `providerMessageId`. That transition is covered by local tests, not a verified AgentMail production webhook.
+The delivery handler advances an alert to `delivered` or `bounced` by `providerMessageId`. The Svix verifier is covered by local tests; live production traffic starts once the AgentMail signing secret is configured.
 
 ## Emergency service (SOS)
 

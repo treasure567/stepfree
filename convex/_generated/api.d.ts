@@ -28,6 +28,7 @@ import type * as lib_idempotency from "../lib/idempotency.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_staticPages from "../lib/staticPages.js";
 import type * as lib_stations from "../lib/stations.js";
+import type * as lib_svix from "../lib/svix.js";
 import type * as lib_transit from "../lib/transit.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as lib_validators from "../lib/validators.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/staticPages": typeof lib_staticPages;
   "lib/stations": typeof lib_stations;
+  "lib/svix": typeof lib_svix;
   "lib/transit": typeof lib_transit;
   "lib/validation": typeof lib_validation;
   "lib/validators": typeof lib_validators;
