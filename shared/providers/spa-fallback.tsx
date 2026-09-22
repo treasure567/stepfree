@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const KNOWN_PREFIXES = ["/account", "/navigate", "/proof"];
+const KNOWN_PREFIXES = ["/account", "/navigate", "/proof", "/ops"];
 
 function isKnownRoute(path: string) {
   return KNOWN_PREFIXES.some(

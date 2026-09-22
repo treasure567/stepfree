@@ -7,6 +7,7 @@ const staticPages = {
   "/account": "/account.html",
   "/navigate": "/navigate.html",
   "/proof": "/proof.html",
+  "/ops": "/ops.html",
 } as const;
 
 const serveStaticPage = (assetPath: string) =>
