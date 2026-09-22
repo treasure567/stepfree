@@ -5,6 +5,7 @@ import {
   internalMutation,
   query,
 } from "./_generated/server";
+import { logActivity } from "./activity";
 
 const feedUrl = "https://api.tfl.gov.uk/Disruptions/Lifts/v2";
 const sourceName = "Transport for London live lift disruption feed";
@@ -222,6 +223,14 @@ export const applyLiftDisruptions = internalMutation({
       completedAt,
     });
 
+    await logActivity(ctx, {
+      action: "tfl.synced",
+      provider: "tfl",
+      level: "success",
+      summary: `TfL live lift feed synced · ${matchedCount} of ${args.disruptions.length} disruptions matched our network`,
+      metadata: { itemCount: args.disruptions.length, matchedCount },
+    });
+
     return {
       status: "success" as const,
       itemCount: args.disruptions.length,
@@ -246,6 +255,12 @@ export const recordSyncFailure = internalMutation({
       fetchedAt: args.fetchedAt,
       completedAt: Date.now(),
       error: args.error,
+    });
+    await logActivity(ctx, {
+      action: "tfl.failed",
+      provider: "tfl",
+      level: "error",
+      summary: `TfL live feed sync failed: ${args.error.slice(0, 120)}`,
     });
   },
 });

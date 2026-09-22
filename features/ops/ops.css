@@ -382,6 +382,197 @@
   color: #a83417;
 }
 
+.ops-header-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 52rem;
+  line-height: 1.5;
+}
+
+.ops-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ops-card-head h2 {
+  margin: 0;
+}
+.ops-card-head .ops-inline-action {
+  margin: 0;
+}
+
+.ops-row-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.ops-metric.is-alarm {
+  border-color: color-mix(in srgb, var(--coral) 45%, transparent);
+}
+.ops-metric.is-alarm strong {
+  color: #a83417;
+}
+.ops-metric.is-good strong {
+  color: #1f8a4c;
+}
+
+/* Provider pills */
+.ops-provider {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ops-provider.is-convex {
+  background: color-mix(in srgb, #8a63f4 16%, var(--paper-bright));
+  color: #5b3fc4;
+  border-color: transparent;
+}
+.ops-provider.is-openai {
+  background: color-mix(in srgb, #10a37f 16%, var(--paper-bright));
+  color: #0b7a5f;
+  border-color: transparent;
+}
+.ops-provider.is-firecrawl {
+  background: color-mix(in srgb, #f97316 18%, var(--paper-bright));
+  color: #b4530a;
+  border-color: transparent;
+}
+.ops-provider.is-agentmail {
+  background: color-mix(in srgb, #2563eb 16%, var(--paper-bright));
+  color: #1d4ed8;
+  border-color: transparent;
+}
+.ops-provider.is-valhalla {
+  background: color-mix(in srgb, #7c3aed 15%, var(--paper-bright));
+  color: #6425c9;
+  border-color: transparent;
+}
+.ops-provider.is-tfl {
+  background: color-mix(in srgb, #0019a8 14%, var(--paper-bright));
+  color: #0019a8;
+  border-color: transparent;
+}
+.ops-provider.is-system {
+  background: var(--paper);
+  color: var(--muted);
+}
+
+/* Telemetry feed */
+.ops-feed {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ops-feed-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.ops-feed-row:first-child {
+  border-top: none;
+}
+.ops-dot {
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+  flex: none;
+}
+.ops-dot.is-success {
+  background: #1f8a4c;
+}
+.ops-dot.is-info {
+  background: #2563eb;
+}
+.ops-dot.is-warn {
+  background: #e0a100;
+}
+.ops-dot.is-error {
+  background: var(--coral);
+}
+.ops-feed-body {
+  min-width: 0;
+}
+.ops-feed-body p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.ops-feed-body small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ops-feed-action {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* Payload viewer */
+.ops-payload {
+  margin: 10px 0 2px;
+  padding: 12px 14px;
+  background: var(--ink);
+  color: #e8f0ee;
+  border-radius: 10px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 320px;
+}
+
+/* Tags */
+.ops-tag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  vertical-align: middle;
+}
+.ops-tag.is-intent-arrived {
+  background: color-mix(in srgb, var(--lime) 40%, var(--paper));
+  color: var(--ink);
+  border-color: transparent;
+}
+.ops-tag.is-intent-still-stuck {
+  background: color-mix(in srgb, var(--coral) 20%, var(--paper));
+  color: #a83417;
+  border-color: transparent;
+}
+.ops-tag.is-intent-pause {
+  background: color-mix(in srgb, #e0a100 22%, var(--paper));
+  color: #8a6400;
+  border-color: transparent;
+}
+
 .spin {
   animation: ops-spin 1s linear infinite;
 }

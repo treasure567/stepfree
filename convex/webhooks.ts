@@ -3,14 +3,26 @@ import { ConvexError, v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
 import { publishEvent } from "./events";
+import { logActivity } from "./activity";
 
 type ReceiptOutcome = "accepted" | "duplicate";
+
+type ReceiptDetails = {
+  payload?: string;
+  eventType?: string;
+  summary?: string;
+};
+
+function providerForSource(source: string): "agentmail" | "system" {
+  return source.startsWith("agentmail") ? "agentmail" : "system";
+}
 
 async function recordReceipt(
   ctx: MutationCtx,
   source: string,
   eventId: string,
   signatureValid: boolean,
+  details: ReceiptDetails = {},
 ): Promise<ReceiptOutcome> {
   const prior = await ctx.db
     .query("webhookReceipts")
@@ -25,6 +37,17 @@ async function recordReceipt(
       signatureValid,
       status: "duplicate",
       receivedAt: Date.now(),
+      ...(details.eventType ? { eventType: details.eventType } : {}),
+      ...(details.summary ? { summary: details.summary } : {}),
+      ...(details.payload ? { payload: details.payload } : {}),
+    });
+    await logActivity(ctx, {
+      action: "webhook.duplicate",
+      provider: providerForSource(source),
+      level: "warn",
+      summary: `Duplicate ${source} webhook ignored (${eventId})`,
+      targetKind: "webhookReceipt",
+      targetId: eventId,
     });
     return "duplicate";
   }
@@ -34,11 +57,23 @@ async function recordReceipt(
     signatureValid,
     status: "accepted",
     receivedAt: Date.now(),
+    ...(details.eventType ? { eventType: details.eventType } : {}),
+    ...(details.summary ? { summary: details.summary } : {}),
+    ...(details.payload ? { payload: details.payload } : {}),
   });
   await publishEvent(ctx, {
     type: "webhook.received",
     dedupeKey: `webhook:${source}:${eventId}`,
     data: { source, eventId },
+  });
+  await logActivity(ctx, {
+    action: "webhook.received",
+    provider: providerForSource(source),
+    level: "success",
+    summary: details.summary ?? `Received ${source} webhook`,
+    targetKind: "webhookReceipt",
+    targetId: eventId,
+    metadata: details.eventType ? { eventType: details.eventType } : undefined,
   });
   return "accepted";
 }
@@ -64,9 +99,14 @@ export const ingestAgentmailDelivery = internalMutation({
     eventId: v.string(),
     providerMessageId: v.string(),
     outcome: v.union(v.literal("delivered"), v.literal("bounced")),
+    payload: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const outcome = await recordReceipt(ctx, "agentmail-delivery", args.eventId, true);
+    const outcome = await recordReceipt(ctx, "agentmail-delivery", args.eventId, true, {
+      payload: args.payload,
+      eventType: args.outcome,
+      summary: `AgentMail ${args.outcome} · ${args.providerMessageId}`,
+    });
     if (outcome === "duplicate") {
       return { duplicate: true, applied: false };
     }
@@ -97,9 +137,14 @@ export const ingestAgentmailInbound = internalMutation({
     subject: v.optional(v.string()),
     text: v.optional(v.string()),
     threadId: v.optional(v.string()),
+    payload: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const outcome = await recordReceipt(ctx, "agentmail-inbound", args.eventId, true);
+    const outcome = await recordReceipt(ctx, "agentmail-inbound", args.eventId, true, {
+      payload: args.payload,
+      eventType: "inbound",
+      summary: `Inbound reply from ${args.fromEmail}`,
+    });
     if (outcome === "duplicate") {
       return { duplicate: true };
     }
@@ -130,6 +175,17 @@ export const ingestAgentmailInbound = internalMutation({
     if (watch && intent === "pause") {
       await ctx.db.patch(watch._id, { status: "paused", updatedAt: Date.now() });
     }
+    await logActivity(ctx, {
+      action: "inbound.parsed",
+      provider: "agentmail",
+      level: "info",
+      summary: `Reply parsed as "${intent}" from ${args.fromEmail}${
+        watch ? " (matched an active watch)" : ""
+      }`,
+      targetKind: "inboundMessage",
+      targetId: args.providerMessageId,
+      metadata: { intent, matchedWatch: watch !== null },
+    });
     return { duplicate: false, matchedWatch: watch !== null, intent };
   },
 });
@@ -140,9 +196,14 @@ export const ingestPartnerLiftStatus = internalMutation({
     stationSlug: v.string(),
     status: v.union(v.literal("working"), v.literal("out-of-service")),
     note: v.optional(v.string()),
+    payload: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const outcome = await recordReceipt(ctx, "partner-lift", args.eventId, true);
+    const outcome = await recordReceipt(ctx, "partner-lift", args.eventId, true, {
+      payload: args.payload,
+      eventType: args.status,
+      summary: `Partner lift ${args.status} · ${args.stationSlug}`,
+    });
     if (outcome === "duplicate") {
       return { duplicate: true, recorded: false };
     }

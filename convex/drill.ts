@@ -8,6 +8,7 @@ import { claimIdempotencyKey } from "./lib/idempotency";
 import { rateLimiter } from "./lib/rateLimits";
 import { calculateTransitRoute } from "./lib/transit";
 import { validateSessionId } from "./lib/validation";
+import { logActivity } from "./activity";
 
 const ACCEPTANCE_CONFIDENCE_THRESHOLD = 0.7;
 
@@ -181,6 +182,17 @@ export const simulateOutage = mutation({
       updatedAt: now,
     });
 
+    await logActivity(ctx, {
+      action: "drill.outage",
+      provider: "system",
+      level: "warn",
+      summary: `Drill: lift outage simulated at ${station.name}`,
+      actor: `session:${sessionId.slice(0, 8)}`,
+      targetKind: "demoIncident",
+      targetId: incidentId,
+      metadata: { stationSlug: slug },
+    });
+
     return { created: true, incidentId };
   },
 });
@@ -201,6 +213,18 @@ export const resolveOutage = mutation({
         status: "resolved",
         updatedAt: now,
         resolvedAt: now,
+      });
+    }
+
+    if (active.length > 0) {
+      await logActivity(ctx, {
+        action: "drill.restored",
+        provider: "system",
+        level: "success",
+        summary: `Drill: step-free access restored (${active.length} incident${
+          active.length === 1 ? "" : "s"
+        } cleared)`,
+        actor: `session:${sessionId.slice(0, 8)}`,
       });
     }
 
@@ -369,10 +393,47 @@ export const runAttacks = mutation({
       ms: Date.now() - t,
     });
 
+    const receipts = await ctx.db
+      .query("webhookReceipts")
+      .withIndex("by_source_and_event", (q) =>
+        q.eq("source", "partner-lift").eq("eventId", eventId),
+      )
+      .collect();
+    for (const row of receipts) await ctx.db.delete(row._id);
+    const reports = await ctx.db
+      .query("reports")
+      .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", eventId))
+      .collect();
+    for (const row of reports) await ctx.db.delete(row._id);
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_dedupe", (q) =>
+        q.eq("dedupeKey", `webhook:partner-lift:${eventId}`),
+      )
+      .collect();
+    for (const row of events) await ctx.db.delete(row._id);
+    const keys = await ctx.db
+      .query("idempotencyKeys")
+      .withIndex("by_scope_and_key", (q) =>
+        q.eq("scope", "attack").eq("key", idemKey),
+      )
+      .collect();
+    for (const row of keys) await ctx.db.delete(row._id);
+
+    const held = results.filter((r) => r.held).length;
+    await logActivity(ctx, {
+      action: "drill.attacks",
+      provider: "system",
+      level: held === results.length ? "success" : "error",
+      summary: `Adversarial battery run: ${held}/${results.length} guards held`,
+      metadata: { held, total: results.length },
+    });
+
     return {
       results,
-      held: results.filter((r) => r.held).length,
+      held,
       total: results.length,
+      ephemeral: true,
     };
   },
 });

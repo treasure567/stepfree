@@ -83,7 +83,7 @@ http.route({
     }
     const result = await ctx.runMutation(
       internal.webhooks.ingestAgentmailDelivery,
-      { eventId, providerMessageId, outcome },
+      { eventId, providerMessageId, outcome, payload: JSON.stringify(check.body) },
     );
     return jsonResponse({ ok: true, ...result });
   }),
@@ -112,7 +112,15 @@ http.route({
     const threadId = stringField(check.body, "threadId") ?? undefined;
     const result = await ctx.runMutation(
       internal.webhooks.ingestAgentmailInbound,
-      { eventId, providerMessageId, fromEmail, subject, text, threadId },
+      {
+        eventId,
+        providerMessageId,
+        fromEmail,
+        subject,
+        text,
+        threadId,
+        payload: JSON.stringify(check.body),
+      },
     );
     return jsonResponse({ ok: true, ...result });
   }),
@@ -141,7 +149,7 @@ http.route({
     const note = stringField(check.body, "note") ?? undefined;
     const result = await ctx.runMutation(
       internal.webhooks.ingestPartnerLiftStatus,
-      { eventId, stationSlug, status, note },
+      { eventId, stationSlug, status, note, payload: JSON.stringify(check.body) },
     );
     return jsonResponse({ ok: true, ...result });
   }),

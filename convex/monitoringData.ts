@@ -1,6 +1,19 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import { normalizeStationName } from "./lib/stations";
+import { logActivity } from "./activity";
+
+function providerForFailure(
+  code: string,
+): "firecrawl" | "openai" | "system" {
+  if (code.startsWith("FIRECRAWL")) {
+    return "firecrawl";
+  }
+  if (code.startsWith("OPENAI")) {
+    return "openai";
+  }
+  return "system";
+}
 
 const candidateValidator = v.object({
   stationName: v.string(),
@@ -72,6 +85,16 @@ export const startRun = internalMutation({
       startedAt: args.startedAt,
     });
 
+    await logActivity(ctx, {
+      action: "evidence.scraped",
+      provider: "firecrawl",
+      level: "success",
+      summary: `Firecrawl fetched the official ${args.sourceName} page`,
+      targetKind: "monitoringRun",
+      targetId: runId,
+      metadata: { contentHash: args.contentHash.slice(0, 12) },
+    });
+
     return {
       runId,
       created: true,
@@ -90,7 +113,7 @@ export const recordFetchFailure = internalMutation({
     failedAt: v.number(),
   },
   handler: async (ctx, args) => {
-    return ctx.db.insert("monitoringRuns", {
+    const runId = await ctx.db.insert("monitoringRuns", {
       sourceName: args.sourceName,
       sourceUrl: args.sourceUrl,
       contentHash: args.contentHash,
@@ -100,6 +123,15 @@ export const recordFetchFailure = internalMutation({
       completedAt: args.failedAt,
       failureCode: args.failureCode,
     });
+    await logActivity(ctx, {
+      action: "evidence.failed",
+      provider: providerForFailure(args.failureCode),
+      level: "error",
+      summary: `Could not fetch the official source (${args.failureCode})`,
+      targetKind: "monitoringRun",
+      targetId: runId,
+    });
+    return runId;
   },
 });
 
@@ -157,6 +189,18 @@ export const completeRun = internalMutation({
       failureCode: undefined,
     });
 
+    await logActivity(ctx, {
+      action: "evidence.extracted",
+      provider: "openai",
+      level: "success",
+      summary: `OpenAI (${args.model}) extracted ${candidateCount} incident candidate${
+        candidateCount === 1 ? "" : "s"
+      } from the official page`,
+      targetKind: "monitoringRun",
+      targetId: args.runId,
+      metadata: { model: args.model, candidateCount },
+    });
+
     return { completed: true, candidateCount };
   },
 });
@@ -178,6 +222,15 @@ export const failRun = internalMutation({
       status: "failed",
       failureCode: args.failureCode,
       completedAt: args.completedAt,
+    });
+
+    await logActivity(ctx, {
+      action: "evidence.failed",
+      provider: providerForFailure(args.failureCode),
+      level: "error",
+      summary: `Evidence run failed (${args.failureCode})`,
+      targetKind: "monitoringRun",
+      targetId: args.runId,
     });
 
     return { recorded: true };

@@ -11,6 +11,7 @@ import {
 import { calculateTransitRoute } from "./lib/transit";
 import { rateLimiter } from "./lib/rateLimits";
 import { requireOps } from "./lib/auth";
+import { logActivity } from "./activity";
 
 const alertStatusValidator = v.union(
   v.literal("queued"),
@@ -324,6 +325,7 @@ export const markSent = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const alert = await ctx.db.get(args.alertId);
     await ctx.db.patch(args.alertId, {
       status: "sent",
       providerMessageId: args.providerMessageId,
@@ -332,6 +334,22 @@ export const markSent = internalMutation({
       updatedAt: now,
       error: undefined,
     });
+    if (alert) {
+      await logActivity(ctx, {
+        action: "alert.sent",
+        provider: "agentmail",
+        level: "success",
+        summary: `Route alert (${alert.reason}) delivered to ${maskRecipient(
+          alert.email,
+        )} · ${alert.fromName} → ${alert.toName}`,
+        targetKind: "alert",
+        targetId: args.alertId,
+        metadata: {
+          providerMessageId: args.providerMessageId,
+          reason: alert.reason,
+        },
+      });
+    }
     return { ok: true };
   },
 });
@@ -339,10 +357,21 @@ export const markSent = internalMutation({
 export const markFailed = internalMutation({
   args: { alertId: v.id("alerts"), error: v.string() },
   handler: async (ctx, args) => {
+    const alert = await ctx.db.get(args.alertId);
     await ctx.db.patch(args.alertId, {
       status: "failed",
       error: args.error.slice(0, 300),
       updatedAt: Date.now(),
+    });
+    await logActivity(ctx, {
+      action: "alert.failed",
+      provider: "agentmail",
+      level: "error",
+      summary: `Route alert delivery failed${
+        alert ? ` · ${alert.fromName} → ${alert.toName}` : ""
+      }: ${args.error.slice(0, 120)}`,
+      targetKind: "alert",
+      targetId: args.alertId,
     });
     return { ok: true };
   },

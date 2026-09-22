@@ -10,39 +10,61 @@ export const metrics = query({
   args: {},
   handler: async (ctx) => {
     await requireOps(ctx);
-    const [raised, escalated, pending, failedEvents, queued, sending] =
-      await Promise.all([
-        ctx.db
-          .query("emergencies")
-          .withIndex("by_status", (q) => q.eq("status", "raised"))
-          .take(METRIC_CAP),
-        ctx.db
-          .query("emergencies")
-          .withIndex("by_status", (q) => q.eq("status", "escalated"))
-          .take(METRIC_CAP),
-        ctx.db
-          .query("incidentCandidates")
-          .withIndex("by_review_status", (q) => q.eq("reviewStatus", "pending"))
-          .take(METRIC_CAP),
-        ctx.db
-          .query("events")
-          .withIndex("by_status", (q) => q.eq("status", "failed"))
-          .take(METRIC_CAP),
-        ctx.db
-          .query("alerts")
-          .withIndex("by_status", (q) => q.eq("status", "queued"))
-          .take(METRIC_CAP),
-        ctx.db
-          .query("alerts")
-          .withIndex("by_status", (q) => q.eq("status", "sending"))
-          .take(METRIC_CAP),
-      ]);
+    const [
+      raised,
+      escalated,
+      pending,
+      failedEvents,
+      queued,
+      sending,
+      sent,
+      webhooks,
+      inbound,
+    ] = await Promise.all([
+      ctx.db
+        .query("emergencies")
+        .withIndex("by_status", (q) => q.eq("status", "raised"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("emergencies")
+        .withIndex("by_status", (q) => q.eq("status", "escalated"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("incidentCandidates")
+        .withIndex("by_review_status", (q) => q.eq("reviewStatus", "pending"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("events")
+        .withIndex("by_status", (q) => q.eq("status", "failed"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("alerts")
+        .withIndex("by_status", (q) => q.eq("status", "queued"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("alerts")
+        .withIndex("by_status", (q) => q.eq("status", "sending"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("alerts")
+        .withIndex("by_status", (q) => q.eq("status", "sent"))
+        .take(METRIC_CAP),
+      ctx.db
+        .query("webhookReceipts")
+        .withIndex("by_received_at")
+        .order("desc")
+        .take(METRIC_CAP),
+      ctx.db.query("inboundMessages").order("desc").take(METRIC_CAP),
+    ]);
     return {
       activeEmergencies: raised.length + escalated.length,
       escalated: escalated.length,
       pendingCandidates: pending.length,
       failedEvents: failedEvents.length,
       inflightAlerts: queued.length + sending.length,
+      alertsSent: sent.length,
+      webhookEvents: webhooks.length,
+      inboundReplies: inbound.length,
       cap: METRIC_CAP,
     };
   },

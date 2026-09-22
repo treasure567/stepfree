@@ -14,6 +14,7 @@ import type { QueryCtx } from "./_generated/server";
 import { claimIdempotencyKey } from "./lib/idempotency";
 import { rateLimiter } from "./lib/rateLimits";
 import { publishEvent } from "./events";
+import { logActivity } from "./activity";
 
 const ESCALATION_WINDOW_MS = 90_000;
 
@@ -112,6 +113,19 @@ export const raise = mutation({
       type: "emergency.raised",
       dedupeKey: `emergency.raised:${emergencyId}`,
       data: { emergencyId },
+    });
+
+    await logActivity(ctx, {
+      action: "emergency.raised",
+      provider: "system",
+      level: "error",
+      summary: `SOS raised: ${args.kind.replace(/-/g, " ")}${
+        args.stationSlug ? ` at ${args.stationSlug}` : ""
+      }`,
+      actor: `session:${args.sessionId.slice(0, 8)}`,
+      targetKind: "emergency",
+      targetId: emergencyId,
+      metadata: { kind: args.kind },
     });
 
     await ctx.runMutation(internal.workflows.startEmergencyEscalation, {

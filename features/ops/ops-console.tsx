@@ -4,15 +4,17 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  Activity,
   AlertTriangle,
   BellRing,
   CheckCircle2,
-  Inbox,
   LayoutGrid,
   LoaderCircle,
-  RefreshCw,
+  Mail,
   Radio,
+  RefreshCw,
   ShieldCheck,
+  Webhook,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { BrandMark } from "@/shared/ui/brand-mark";
@@ -22,9 +24,25 @@ type SectionId =
   | "emergencies"
   | "review"
   | "alerts"
+  | "activity"
   | "events"
   | "evidence"
-  | "webhooks";
+  | "webhooks"
+  | "inbox";
+
+const PROVIDER_META: Record<string, { label: string; className: string }> = {
+  convex: { label: "Convex", className: "is-convex" },
+  openai: { label: "OpenAI", className: "is-openai" },
+  firecrawl: { label: "Firecrawl", className: "is-firecrawl" },
+  agentmail: { label: "AgentMail", className: "is-agentmail" },
+  valhalla: { label: "Valhalla", className: "is-valhalla" },
+  tfl: { label: "TfL", className: "is-tfl" },
+  system: { label: "System", className: "is-system" },
+};
+
+function providerMeta(provider: string) {
+  return PROVIDER_META[provider] ?? { label: provider, className: "is-system" };
+}
 
 function clockAt(ts: number) {
   return new Date(ts).toLocaleTimeString([], {
@@ -33,11 +51,31 @@ function clockAt(ts: number) {
   });
 }
 
+function relativeTime(ts: number) {
+  const diff = Date.now() - ts;
+  const secs = Math.round(diff / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function prettyJson(value: string) {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
 export function OpsConsole() {
   const profile = useQuery(api.users.current);
   const authed = profile !== null && profile !== undefined;
   const arg = authed ? {} : "skip";
   const [section, setSection] = useState<SectionId>("overview");
+  const [openPayload, setOpenPayload] = useState<string | null>(null);
 
   const metrics = useQuery(api.ops.metrics, arg);
   const emergencies = useQuery(api.emergency.active, arg) ?? [];
@@ -50,6 +88,9 @@ export function OpsConsole() {
   const runs = useQuery(api.review.recentRuns, arg) ?? [];
   const syncStatus = useQuery(api.tfl.getSyncStatus, arg);
   const receipts = useQuery(api.webhooks.receipts, arg) ?? [];
+  const inbound = useQuery(api.webhooks.recentInbound, arg) ?? [];
+  const activity = useQuery(api.activity.recent, authed ? { limit: 60 } : "skip") ?? [];
+  const activityStats = useQuery(api.activity.stats, arg);
 
   const acknowledge = useMutation(api.emergency.acknowledge);
   const resolveEmergency = useMutation(api.emergency.resolve);
@@ -109,37 +150,75 @@ export function OpsConsole() {
     label: string;
     icon: typeof LayoutGrid;
     badge?: number;
+    desc: string;
   }> = [
-    { id: "overview", label: "Overview", icon: LayoutGrid },
+    {
+      id: "overview",
+      label: "Overview",
+      icon: LayoutGrid,
+      desc: "Everything happening across StepFree, at a glance.",
+    },
     {
       id: "emergencies",
       label: "Emergencies",
       icon: BellRing,
       badge: emergencies.length,
+      desc: "Live SOS calls from travellers who are stuck. Acknowledge, then resolve.",
     },
     {
       id: "review",
       label: "Incident review",
       icon: ShieldCheck,
       badge: candidates.length,
+      desc: "Machine-read incidents wait here for a human to accept or reject before they change any route.",
     },
-    { id: "alerts", label: "Alerts", icon: RefreshCw, badge: failedAlerts.length },
+    {
+      id: "alerts",
+      label: "Alerts",
+      icon: RefreshCw,
+      badge: failedAlerts.length,
+      desc: "The email alert pipeline: queued, sending, sent, delivered — and any that need a retry.",
+    },
+    {
+      id: "activity",
+      label: "Activity log",
+      icon: Activity,
+      desc: "Every action, and which provider performed it — the system's telemetry stream.",
+    },
     {
       id: "events",
       label: "Event bus",
       icon: AlertTriangle,
       badge: failedEvents.length,
+      desc: "Internal events that fan work out to consumers. Failed ones can be retried.",
     },
-    { id: "evidence", label: "Evidence & sources", icon: Radio },
-    { id: "webhooks", label: "Webhooks", icon: Inbox },
+    {
+      id: "evidence",
+      label: "Evidence & sources",
+      icon: Radio,
+      desc: "Run the Firecrawl + OpenAI evidence pipeline and sync the live TfL feed.",
+    },
+    {
+      id: "webhooks",
+      label: "Webhooks",
+      icon: Webhook,
+      desc: "Signed inbound webhooks from AgentMail and partners. Open any receipt to see its payload.",
+    },
+    {
+      id: "inbox",
+      label: "Inbox",
+      icon: Mail,
+      badge: inbound.length,
+      desc: "Replies travellers send back to our alerts, parsed into an intent.",
+    },
   ];
-  const activeLabel = nav.find((n) => n.id === section)?.label ?? "Overview";
+  const active = nav.find((n) => n.id === section) ?? nav[0];
 
   const emergenciesView = (
     <div className="ops-card">
       <h2>Active emergencies</h2>
       {emergencies.length === 0 ? (
-        <p className="ops-empty">No active emergencies.</p>
+        <p className="ops-empty">No active emergencies. Everyone is moving.</p>
       ) : (
         <ul className="ops-list">
           {emergencies.map((e) => (
@@ -241,7 +320,7 @@ export function OpsConsole() {
           : null}
       </div>
       {failedAlerts.length === 0 ? (
-        <p className="ops-empty">No failed alerts.</p>
+        <p className="ops-empty">No failed alerts. The pipeline is healthy.</p>
       ) : (
         <ul className="ops-list">
           {failedAlerts.map((a) => (
@@ -262,6 +341,57 @@ export function OpsConsole() {
                 >
                   Retry
                 </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  const activityView = (
+    <div className="ops-card">
+      <h2>Activity &amp; provider telemetry</h2>
+      <p className="ops-sub">
+        Every meaningful action StepFree takes is logged with the provider that
+        performed it.
+      </p>
+      {activityStats ? (
+        <div className="ops-chips">
+          {Object.entries(activityStats.byProvider)
+            .filter(([, count]) => count > 0)
+            .map(([provider, count]) => (
+              <span
+                key={provider}
+                className={`ops-provider ${providerMeta(provider).className}`}
+              >
+                {providerMeta(provider).label} {count}
+              </span>
+            ))}
+        </div>
+      ) : null}
+      {activity.length === 0 ? (
+        <p className="ops-empty">
+          No activity yet. Run the evidence pipeline or trigger a drill to see
+          the stream fill up.
+        </p>
+      ) : (
+        <ul className="ops-feed">
+          {activity.map((row) => (
+            <li key={row._id} className={`ops-feed-row is-${row.level}`}>
+              <span className={`ops-dot is-${row.level}`} aria-hidden="true" />
+              <div className="ops-feed-body">
+                <p>{row.summary}</p>
+                <small>
+                  <span
+                    className={`ops-provider ${providerMeta(row.provider).className}`}
+                  >
+                    {providerMeta(row.provider).label}
+                  </span>
+                  <span className="ops-feed-action">{row.action}</span>
+                  {row.actor ? <span>· {row.actor}</span> : null}
+                  <span>· {relativeTime(row.createdAt)}</span>
+                </small>
               </div>
             </li>
           ))}
@@ -354,17 +484,82 @@ export function OpsConsole() {
   const webhooksView = (
     <div className="ops-card">
       <h2>Webhook receipts</h2>
+      <p className="ops-sub">
+        Signed, deduplicated and stored. Open a receipt to inspect the exact
+        payload we received.
+      </p>
       {receipts.length === 0 ? (
         <p className="ops-empty">No webhook traffic yet.</p>
       ) : (
         <ul className="ops-list">
-          {receipts.map((rec) => (
-            <li key={rec._id} className={`ops-row is-${rec.status}`}>
-              <div>
-                <strong>{rec.source}</strong>
+          {receipts.map((rec) => {
+            const isOpen = openPayload === rec._id;
+            return (
+              <li key={rec._id} className={`ops-row is-${rec.status}`}>
+                <div className="ops-row-grow">
+                  <strong>
+                    {rec.source}
+                    {rec.eventType ? (
+                      <span className="ops-tag">{rec.eventType}</span>
+                    ) : null}
+                  </strong>
+                  <small>
+                    {rec.status}
+                    {rec.signatureValid ? " · signed ✓" : " · unsigned"} ·{" "}
+                    {rec.eventId} · {clockAt(rec.receivedAt)}
+                  </small>
+                  {rec.summary ? <p className="ops-note">{rec.summary}</p> : null}
+                  {isOpen && rec.payload ? (
+                    <pre className="ops-payload">{prettyJson(rec.payload)}</pre>
+                  ) : null}
+                </div>
+                {rec.payload ? (
+                  <div className="ops-rowactions">
+                    <button
+                      type="button"
+                      className="is-ghost"
+                      onClick={() => setOpenPayload(isOpen ? null : rec._id)}
+                    >
+                      {isOpen ? "Hide payload" : "View payload"}
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+
+  const inboxView = (
+    <div className="ops-card">
+      <h2>Inbound replies</h2>
+      <p className="ops-sub">
+        When a traveller replies to an alert, AgentMail posts it here and we
+        parse the intent — no polling.
+      </p>
+      {inbound.length === 0 ? (
+        <p className="ops-empty">No inbound replies yet.</p>
+      ) : (
+        <ul className="ops-list">
+          {inbound.map((m) => (
+            <li key={m._id} className="ops-row">
+              <div className="ops-row-grow">
+                <strong>
+                  {m.fromEmail}
+                  {m.parsedIntent ? (
+                    <span className={`ops-tag is-intent-${m.parsedIntent}`}>
+                      {m.parsedIntent}
+                    </span>
+                  ) : null}
+                </strong>
                 <small>
-                  {rec.status} · {rec.eventId} · {clockAt(rec.receivedAt)}
+                  {m.watchId ? "matched an active watch" : "no matching watch"} ·{" "}
+                  {clockAt(m.receivedAt)}
                 </small>
+                {m.subject ? <p className="ops-note">{m.subject}</p> : null}
+                {m.text ? <p className="ops-note">“{m.text}”</p> : null}
               </div>
             </li>
           ))}
@@ -373,29 +568,116 @@ export function OpsConsole() {
     </div>
   );
 
+  const metricTiles: Array<{
+    key: string;
+    value: number | string;
+    label: string;
+    to: SectionId;
+    tone?: string;
+  }> = [
+    {
+      key: "sos",
+      value: metrics?.activeEmergencies ?? "—",
+      label: "Active SOS",
+      to: "emergencies",
+      tone: (metrics?.activeEmergencies ?? 0) > 0 ? "alarm" : undefined,
+    },
+    {
+      key: "review",
+      value: metrics?.pendingCandidates ?? "—",
+      label: "Pending review",
+      to: "review",
+    },
+    {
+      key: "inflight",
+      value: metrics?.inflightAlerts ?? "—",
+      label: "Alerts in flight",
+      to: "alerts",
+    },
+    {
+      key: "sent",
+      value: metrics?.alertsSent ?? "—",
+      label: "Alerts delivered",
+      to: "alerts",
+      tone: "good",
+    },
+    {
+      key: "webhooks",
+      value: metrics?.webhookEvents ?? "—",
+      label: "Webhook events",
+      to: "webhooks",
+    },
+    {
+      key: "inbound",
+      value: metrics?.inboundReplies ?? "—",
+      label: "Inbound replies",
+      to: "inbox",
+    },
+    {
+      key: "events",
+      value: metrics?.failedEvents ?? "—",
+      label: "Failed events",
+      to: "events",
+      tone: (metrics?.failedEvents ?? 0) > 0 ? "alarm" : undefined,
+    },
+    {
+      key: "activity",
+      value: activityStats?.total ?? "—",
+      label: "Logged actions",
+      to: "activity",
+    },
+  ];
+
   const overviewView = (
     <>
       <div className="ops-metrics">
-        <button className="ops-metric" onClick={() => setSection("emergencies")}>
-          <strong>{metrics?.activeEmergencies ?? "—"}</strong>
-          <span>Active SOS</span>
-        </button>
-        <button className="ops-metric" onClick={() => setSection("review")}>
-          <strong>{metrics?.pendingCandidates ?? "—"}</strong>
-          <span>Pending review</span>
-        </button>
-        <button className="ops-metric" onClick={() => setSection("alerts")}>
-          <strong>{metrics?.inflightAlerts ?? "—"}</strong>
-          <span>Alerts in flight</span>
-        </button>
-        <button className="ops-metric" onClick={() => setSection("events")}>
-          <strong>{metrics?.failedEvents ?? "—"}</strong>
-          <span>Failed events</span>
-        </button>
+        {metricTiles.map((tile) => (
+          <button
+            key={tile.key}
+            className={`ops-metric${tile.tone ? ` is-${tile.tone}` : ""}`}
+            onClick={() => setSection(tile.to)}
+          >
+            <strong>{tile.value}</strong>
+            <span>{tile.label}</span>
+          </button>
+        ))}
       </div>
       <div className="ops-two">
         {emergenciesView}
-        {alertsView}
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <h2>Live activity</h2>
+            <button
+              type="button"
+              className="ops-inline-action"
+              onClick={() => setSection("activity")}
+            >
+              Open full log
+            </button>
+          </div>
+          {activity.length === 0 ? (
+            <p className="ops-empty">Nothing yet — trigger a drill to watch it move.</p>
+          ) : (
+            <ul className="ops-feed">
+              {activity.slice(0, 7).map((row) => (
+                <li key={row._id} className={`ops-feed-row is-${row.level}`}>
+                  <span className={`ops-dot is-${row.level}`} aria-hidden="true" />
+                  <div className="ops-feed-body">
+                    <p>{row.summary}</p>
+                    <small>
+                      <span
+                        className={`ops-provider ${providerMeta(row.provider).className}`}
+                      >
+                        {providerMeta(row.provider).label}
+                      </span>
+                      <span>· {relativeTime(row.createdAt)}</span>
+                    </small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </>
   );
@@ -405,9 +687,11 @@ export function OpsConsole() {
     emergencies: emergenciesView,
     review: reviewView,
     alerts: alertsView,
+    activity: activityView,
     events: eventsView,
     evidence: evidenceView,
     webhooks: webhooksView,
+    inbox: inboxView,
   };
 
   return (
@@ -445,7 +729,8 @@ export function OpsConsole() {
         <header className="ops-header">
           <div>
             <span className="ops-header-kicker">Operations console</span>
-            <h1>{activeLabel}</h1>
+            <h1>{active.label}</h1>
+            <p className="ops-header-desc">{active.desc}</p>
           </div>
           <span className="ops-operator">
             <CheckCircle2 aria-hidden="true" /> {profile?.displayName ?? "Operator"}

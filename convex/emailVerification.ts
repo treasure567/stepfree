@@ -9,6 +9,7 @@ import {
   mutation,
 } from "./_generated/server";
 import { createNumericCode, hashVerificationCode } from "./lib/crypto";
+import { logActivity } from "./activity";
 import { rateLimiter } from "./lib/rateLimits";
 import {
   normalizeEmail,
@@ -172,6 +173,14 @@ export const markSent = internalMutation({
     await ctx.db.patch(request._id, {
       status: "sent",
       sentAt: Date.now(),
+    });
+    await logActivity(ctx, {
+      action: "verification.sent",
+      provider: "agentmail",
+      level: "success",
+      summary: "Email verification code delivered",
+      targetKind: "emailVerification",
+      targetId: request._id,
     });
     return true;
   },

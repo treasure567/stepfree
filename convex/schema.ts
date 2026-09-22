@@ -440,6 +440,9 @@ export default defineSchema({
       v.literal("rejected"),
       v.literal("duplicate"),
     ),
+    eventType: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    payload: v.optional(v.string()),
     receivedAt: v.number(),
   })
     .index("by_source_and_event", ["source", "eventId"])
@@ -465,4 +468,32 @@ export default defineSchema({
     guardsTotal: v.number(),
     createdAt: v.number(),
   }).index("by_code", ["code"]),
+  activity: defineTable({
+    action: v.string(),
+    provider: v.union(
+      v.literal("convex"),
+      v.literal("openai"),
+      v.literal("firecrawl"),
+      v.literal("agentmail"),
+      v.literal("valhalla"),
+      v.literal("tfl"),
+      v.literal("system"),
+    ),
+    level: v.union(
+      v.literal("info"),
+      v.literal("success"),
+      v.literal("warn"),
+      v.literal("error"),
+    ),
+    summary: v.string(),
+    actor: v.optional(v.string()),
+    targetKind: v.optional(v.string()),
+    targetId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_created", ["createdAt"])
+    .index("by_provider", ["provider", "createdAt"])
+    .index("by_action", ["action", "createdAt"])
+    .index("by_level", ["level", "createdAt"]),
 });
