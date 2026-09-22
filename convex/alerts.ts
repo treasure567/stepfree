@@ -180,7 +180,7 @@ export const requestDrillAlert = mutation({
 
     const reason =
       route.status === "blocked" ? ("blocked" as const) : ("rerouted" as const);
-    const idempotencyKey = `drill:${sessionId}:${route.fingerprint}`;
+    const idempotencyKey = `drill:${sessionId}:${route.fingerprint}:${recipient.toLowerCase()}`;
     const duplicate = await ctx.db
       .query("alerts")
       .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", idempotencyKey))

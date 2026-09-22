@@ -80,6 +80,14 @@ export function ProofConsole() {
   >("stuck-no-lift");
   const [sosNote, setSosNote] = useState("");
   const [sosEmail, setSosEmail] = useState("");
+  const [alertEmail, setAlertEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem("stepfree-alert-email") ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   const stations = useQuery(api.routes.listStations) ?? [];
   const drill = useQuery(api.drill.state, sessionId ? { sessionId } : "skip");
@@ -296,9 +304,22 @@ export function ProofConsole() {
 
   const onSendAlert = async () => {
     if (!sessionId) return;
+    const email = alertEmail.trim();
     setBusy("alert");
     try {
-      await requestAlert({ sessionId, fromSlug: from, toSlug: to });
+      await requestAlert({
+        sessionId,
+        fromSlug: from,
+        toSlug: to,
+        email: email || undefined,
+      });
+      if (email && typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("stepfree-alert-email", email);
+        } catch {
+          /* private mode — ignore */
+        }
+      }
     } catch {
       /* status surfaces in the alert log */
     } finally {
@@ -581,6 +602,16 @@ export function ProofConsole() {
           <div className="proof-block-head">
             <h2>Traveller alert</h2>
           </div>
+          <label className="proof-field">
+            <span>Your email — get the real reroute alert</span>
+            <input
+              type="email"
+              value={alertEmail}
+              onChange={(e) => setAlertEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </label>
           <button
             type="button"
             className="proof-button is-slim"
@@ -592,7 +623,12 @@ export function ProofConsole() {
           </button>
           {!outageActive ? (
             <p className="proof-hint">Break a lift first to arm an alert.</p>
-          ) : null}
+          ) : (
+            <p className="proof-hint">
+              Enter your email to receive the live alert. Leave it blank and it
+              routes to the demo inbox.
+            </p>
+          )}
           {latestAlert ? (
             <div className="proof-receipt">
               <span>
