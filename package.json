@@ -1,27 +1,44 @@
 {
-  "name": "convex",
+  "name": "stepfree",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "convex dev --start 'next dev'",
+    "dev:web": "next dev",
+    "dev:backend": "convex dev",
+    "setup:local": "convex dev --once --run internal.seed.seedNetwork",
+    "seed": "convex run internal.seed.seedNetwork",
+    "build": "node scripts/copy-maplibre-worker.mjs && next build",
+    "deploy": "static-hosting deploy --dist out --build-command \"pnpm build\"",
+    "deploy:web": "pnpm build && static-hosting upload --dist out --prod",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@convex-dev/auth": "2.0.0-alpha.1",
+    "@convex-dev/rate-limiter": "^0.3.2",
+    "@convex-dev/static-hosting": "^0.2.1",
+    "convex": "^1.45.0",
+    "lucide-react": "^1.44.0",
+    "maplibre-gl": "^6.9.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "convex-test": "^0.0.59",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.1"
   },
   "packageManager": "pnpm@11.8.0"
 }

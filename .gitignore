@@ -17,6 +17,12 @@
 /.next/
 /out/
 
+# local agent tooling
+/.agents/
+/.claude/
+/skills-lock.json
+/convex/_generated/ai/
+
 # production
 /build
 
