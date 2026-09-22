@@ -21,7 +21,7 @@ const alertStatusValidator = v.union(
   v.literal("failed"),
 );
 import { validateEmail, validateSessionId } from "./lib/validation";
-import { sendRouteAlert } from "./providers/agentmail";
+import { buildRouteAlertEmail } from "./providers/agentmail";
 
 function routeViaSummary(stations: Array<{ name: string }>) {
   const middle = stations.slice(1, -1).map((station) => station.name);
@@ -220,7 +220,12 @@ export const requestDrillAlert = mutation({
 
 export const deliverAlert = internalAction({
   args: { alertId: v.id("alerts") },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    { skipped: true } | { sent: true; providerMessageId: string }
+  > => {
     const claimed = await ctx.runMutation(internal.alerts.markSending, {
       alertId: args.alertId,
     });
@@ -230,8 +235,7 @@ export const deliverAlert = internalAction({
     }
 
     try {
-      const result = await sendRouteAlert({
-        to: claimed.email,
+      const email = buildRouteAlertEmail({
         fromName: claimed.fromName,
         toName: claimed.toName,
         reason: claimed.reason,
@@ -239,12 +243,20 @@ export const deliverAlert = internalAction({
         routeVia: claimed.routeVia,
         durationAfter: claimed.durationAfter,
         delayMinutes: claimed.delayMinutes,
-        idempotencyKey: claimed.idempotencyKey,
       });
+      const result: { messageId: string } = await ctx.runAction(
+        internal.emailSend.deliver,
+        {
+          to: claimed.email,
+          subject: email.subject,
+          text: email.text,
+          html: email.html,
+          idempotencyKey: claimed.idempotencyKey,
+        },
+      );
       await ctx.runMutation(internal.alerts.markSent, {
         alertId: args.alertId,
         providerMessageId: result.messageId,
-        providerThreadId: result.threadId,
       });
       return { sent: true, providerMessageId: result.messageId };
     } catch (error) {
@@ -259,9 +271,24 @@ export const deliverAlert = internalAction({
   },
 });
 
+type MarkSendingResult =
+  | { claimed: false }
+  | {
+      claimed: true;
+      email: string;
+      fromName: string;
+      toName: string;
+      reason: "rerouted" | "blocked" | "restored";
+      incidentTitle?: string;
+      routeVia?: string;
+      durationAfter?: number;
+      delayMinutes?: number;
+      idempotencyKey: string;
+    };
+
 export const markSending = internalMutation({
   args: { alertId: v.id("alerts") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<MarkSendingResult> => {
     const alert = await ctx.db.get(args.alertId);
 
     if (!alert || alert.status !== "queued") {

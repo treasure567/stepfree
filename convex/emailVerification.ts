@@ -15,7 +15,7 @@ import {
   validateEmail,
   validateIdempotencyKey,
 } from "./lib/validation";
-import { sendVerificationEmail } from "./providers/agentmail";
+import { buildVerificationEmail } from "./providers/agentmail";
 
 const verificationLifetime = 10 * 60 * 1_000;
 
@@ -290,10 +290,15 @@ export const request = action({
     }
 
     try {
-      await sendVerificationEmail({
-        to: email,
+      const message = buildVerificationEmail({
         code,
         displayName: prepared.displayName,
+      });
+      await ctx.runAction(internal.emailSend.deliver, {
+        to: email,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
       });
       await ctx.runMutation(internal.emailVerification.markSent, {
         requestId: prepared.requestId,
