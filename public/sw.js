@@ -1,4 +1,4 @@
-const cacheName = "stepfree-shell-v2";
+const cacheName = "stepfree-shell-v3";
 const shellFiles = ["/", "/manifest.webmanifest", "/icon.svg", "/stepfree-hero.png"];
 
 self.addEventListener("install", (event) => {
