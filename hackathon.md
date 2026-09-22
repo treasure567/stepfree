@@ -15,8 +15,8 @@ StepFree is a live accessibility layer for public transit. It watches official a
 - **Street navigator:** [whimsical-ferret-778.convex.site/navigate](https://whimsical-ferret-778.convex.site/navigate)
 - **Operations console:** [whimsical-ferret-778.convex.site/ops](https://whimsical-ferret-778.convex.site/ops)
 - **Source:** [github.com/treasure567/stepfree](https://github.com/treasure567/stepfree)
-- **Demo video:** VIDEO_URL
-- **Launch post:** LAUNCH_POST_URL
+- **Demo video (3-min walkthrough):** [youtu.be/Iisonc0n-go](https://youtu.be/Iisonc0n-go)
+- **Launch post:** [x.com/naheem__x](https://x.com/naheem__x/status/2102456491831673126)
 
 ## At a glance, for judging
 
@@ -323,11 +323,11 @@ The 23 tables are grouped by responsibility.
 - The Bond Street lift failure.
 - The journey animation.
 
-### Still to finish before submission
+### Shipped for submission
 
-- Record and upload the under-three-minute demo.
-- Publish the social launch post and add its URL.
-- Make the repository public before the final submission.
+- The three-minute demo walkthrough is published: [youtu.be/Iisonc0n-go](https://youtu.be/Iisonc0n-go).
+- The launch post is live: [x.com/naheem__x](https://x.com/naheem__x/status/2102456491831673126).
+- Confirm the repository is public before final submission so judges can open the source.
 
 ## Build log
 

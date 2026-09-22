@@ -10,6 +10,8 @@ For the product story, production evidence, architecture diagrams, sponsor integ
 - [Judge proof console](https://whimsical-ferret-778.convex.site/proof)
 - [Street navigator](https://whimsical-ferret-778.convex.site/navigate)
 - [Operations console](https://whimsical-ferret-778.convex.site/ops)
+- [Demo video (3-min walkthrough)](https://youtu.be/Iisonc0n-go)
+- [Launch post](https://x.com/naheem__x/status/2102456491831673126)
 
 ## Current system snapshot
 
