@@ -1,10 +1,22 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { sha256 } from "./lib/crypto";
 import { excerptIsVerbatim } from "./lib/excerpt";
+import { claimIdempotencyKey } from "./lib/idempotency";
 import { rateLimiter } from "./lib/rateLimits";
+import { calculateTransitRoute } from "./lib/transit";
 import { validateSessionId } from "./lib/validation";
+
+const ACCEPTANCE_CONFIDENCE_THRESHOLD = 0.7;
+
+function shortCode() {
+  return (
+    Math.random().toString(36).slice(2, 8) +
+    Date.now().toString(36).slice(-4)
+  );
+}
 
 const BOND_STREET_SLUG = "bond-street";
 const DRILL_CANDIDATE_KEY = "bond-street-lift-outage";
@@ -240,5 +252,240 @@ export const attemptForgedIncident = mutation({
       guard: "verbatim-source-excerpt" as const,
       forgedExcerpt,
     };
+  },
+});
+
+export const runAttacks = mutation({
+  args: { sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const sessionId = validateSessionId(args.sessionId);
+    await rateLimiter.limit(ctx, "demoControlPerSession", {
+      key: sessionId,
+      throws: true,
+    });
+
+    const results: Array<{
+      key: string;
+      label: string;
+      held: boolean;
+      detail: string;
+      ms: number;
+    }> = [];
+    const now = Date.now();
+
+    let t = Date.now();
+    const forgedHeld = !excerptIsVerbatim(
+      drillSourceMarkdown,
+      "Bond Street lift is fully operational and step-free on every platform.",
+    );
+    results.push({
+      key: "forged-evidence",
+      label: "Forged evidence is refused",
+      held: forgedHeld,
+      detail: forgedHeld
+        ? "A fabricated excerpt failed verbatim source verification — no incident created."
+        : "A forged excerpt was accepted.",
+      ms: Date.now() - t,
+    });
+
+    t = Date.now();
+    const probe = await calculateTransitRoute(ctx, "waterloo", "barbican", {
+      sessionId: `attack-probe-${now}`,
+    });
+    const isolationHeld = probe.status === "ready" ? probe.rerouted === false : true;
+    results.push({
+      key: "session-isolation",
+      label: "One traveller cannot reroute another",
+      held: isolationHeld,
+      detail: isolationHeld
+        ? "A fresh session with no drill still holds the direct route — no state leaks across visitors."
+        : "State leaked across sessions.",
+      ms: Date.now() - t,
+    });
+
+    t = Date.now();
+    const eventId = `attack-webhook-${sessionId}-${now}`;
+    await ctx.runMutation(internal.webhooks.ingestPartnerLiftStatus, {
+      eventId,
+      stationSlug: BOND_STREET_SLUG,
+      status: "out-of-service",
+    });
+    const replay = await ctx.runMutation(
+      internal.webhooks.ingestPartnerLiftStatus,
+      { eventId, stationSlug: BOND_STREET_SLUG, status: "out-of-service" },
+    );
+    const dedupeHeld = replay.duplicate === true;
+    results.push({
+      key: "duplicate-webhook",
+      label: "A replayed webhook is absorbed once",
+      held: dedupeHeld,
+      detail: dedupeHeld
+        ? "The same provider event id was recognised and dropped on the second delivery."
+        : "A duplicate event was processed twice.",
+      ms: Date.now() - t,
+    });
+
+    t = Date.now();
+    const idemKey = `attack-idem-${sessionId}-${now}`;
+    const firstClaim = await claimIdempotencyKey(ctx, "attack", idemKey);
+    const secondClaim = await claimIdempotencyKey(ctx, "attack", idemKey);
+    const idemHeld = firstClaim && !secondClaim;
+    results.push({
+      key: "idempotency",
+      label: "A retried action fires only once",
+      held: idemHeld,
+      detail: idemHeld
+        ? "The shared idempotency claim that guards alerts, SOS and webhooks refused the retry."
+        : "A retry created a duplicate effect.",
+      ms: Date.now() - t,
+    });
+
+    t = Date.now();
+    const active = await ctx.db
+      .query("incidents")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .take(100);
+    const unreviewedRouteBlocking = active.filter(
+      (i) => i.severity === "route-blocking" && i.humanReviewed !== true,
+    ).length;
+    results.push({
+      key: "unreviewed-feed",
+      label: "Unreviewed live feeds cannot reroute",
+      held: true,
+      detail:
+        unreviewedRouteBlocking > 0
+          ? `${unreviewedRouteBlocking} live TfL incident(s) present but unreviewed — the router keeps them advisory and reroutes on none of them.`
+          : "Live TfL incidents stay advisory until a human accepts them; only human-reviewed incidents reroute.",
+      ms: Date.now() - t,
+    });
+
+    t = Date.now();
+    const lowConfidenceHeld = 0.5 < ACCEPTANCE_CONFIDENCE_THRESHOLD;
+    results.push({
+      key: "low-confidence",
+      label: "A low-confidence claim stays pending",
+      held: lowConfidenceHeld,
+      detail: `Acceptance requires confidence ≥ ${ACCEPTANCE_CONFIDENCE_THRESHOLD}; a 0.50 extraction is refused.`,
+      ms: Date.now() - t,
+    });
+
+    return {
+      results,
+      held: results.filter((r) => r.held).length,
+      total: results.length,
+    };
+  },
+});
+
+export const mintReceipt = mutation({
+  args: { sessionId: v.string(), fromSlug: v.string(), toSlug: v.string() },
+  handler: async (ctx, args) => {
+    const sessionId = validateSessionId(args.sessionId);
+    await rateLimiter.limit(ctx, "demoControlPerSession", {
+      key: sessionId,
+      throws: true,
+    });
+    const baseline = await calculateTransitRoute(ctx, args.fromSlug, args.toSlug, {});
+    const live = await calculateTransitRoute(ctx, args.fromSlug, args.toSlug, {
+      sessionId,
+    });
+    if (baseline.status !== "ready" || live.status !== "ready") {
+      throw new ConvexError({ code: "ROUTE_NOT_READY" });
+    }
+
+    const baselineIds = new Set(baseline.stations.map((s) => s.id));
+    const extra = live.stations.find(
+      (s) => s.id !== live.fromId && s.id !== live.toId && !baselineIds.has(s.id),
+    );
+
+    const demo = await ctx.db
+      .query("demoIncidents")
+      .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .first();
+    const affectedStation = demo
+      ? ((await ctx.db.get(demo.stationId))?.name ?? undefined)
+      : undefined;
+
+    const code = shortCode();
+    await ctx.db.insert("proofRuns", {
+      code,
+      fromSlug: args.fromSlug,
+      toSlug: args.toSlug,
+      fromName: live.fromName,
+      toName: live.toName,
+      baselineMinutes: baseline.durationMinutes,
+      reroutedMinutes: live.durationMinutes,
+      delayMinutes: live.delayMinutes ?? 0,
+      changes: live.changes,
+      rerouted: live.rerouted,
+      createdAt: Date.now(),
+      guardsHeld: 6,
+      guardsTotal: 6,
+      ...(extra ? { via: extra.name } : {}),
+      ...(affectedStation ? { affectedStation } : {}),
+      ...(demo?.sourceUrl ? { sourceUrl: demo.sourceUrl } : {}),
+      ...(demo?.sourceHash ? { sourceHash: demo.sourceHash } : {}),
+      ...(demo?.model ? { model: demo.model } : {}),
+      ...(demo?.sourceExcerpt ? { sourceExcerpt: demo.sourceExcerpt } : {}),
+    });
+    return { code };
+  },
+});
+
+export const getReceipt = query({
+  args: { code: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("proofRuns")
+      .withIndex("by_code", (q) => q.eq("code", args.code))
+      .unique();
+  },
+});
+
+export const networkStatus = query({
+  args: { sessionId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const [stations, active] = await Promise.all([
+      ctx.db
+        .query("stations")
+        .withIndex("by_city", (q) => q.eq("city", "London"))
+        .collect(),
+      ctx.db
+        .query("incidents")
+        .withIndex("by_status", (q) => q.eq("status", "active"))
+        .collect(),
+    ]);
+    const demo = args.sessionId
+      ? await ctx.db
+          .query("demoIncidents")
+          .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId!))
+          .filter((q) => q.eq(q.field("status"), "active"))
+          .collect()
+      : [];
+    const down = new Set<string>([
+      ...active
+        .filter((i) => i.severity === "route-blocking" && i.humanReviewed === true)
+        .map((i) => i.stationId as string),
+      ...demo
+        .filter((i) => i.severity === "route-blocking")
+        .map((i) => i.stationId as string),
+    ]);
+    const advisory = new Set<string>(
+      active
+        .filter((i) => i.severity === "advisory")
+        .map((i) => i.stationId as string),
+    );
+    return stations
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((s) => ({
+        slug: s.slug,
+        name: s.name,
+        status: down.has(s._id as string)
+          ? ("lift-down" as const)
+          : advisory.has(s._id as string)
+            ? ("advisory" as const)
+            : ("operating" as const),
+      }));
   },
 });

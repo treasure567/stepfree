@@ -444,4 +444,25 @@ export default defineSchema({
   })
     .index("by_source_and_event", ["source", "eventId"])
     .index("by_received_at", ["receivedAt"]),
+  proofRuns: defineTable({
+    code: v.string(),
+    fromSlug: v.string(),
+    toSlug: v.string(),
+    fromName: v.string(),
+    toName: v.string(),
+    baselineMinutes: v.number(),
+    reroutedMinutes: v.number(),
+    delayMinutes: v.number(),
+    changes: v.number(),
+    rerouted: v.boolean(),
+    via: v.optional(v.string()),
+    affectedStation: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    sourceHash: v.optional(v.string()),
+    model: v.optional(v.string()),
+    sourceExcerpt: v.optional(v.string()),
+    guardsHeld: v.number(),
+    guardsTotal: v.number(),
+    createdAt: v.number(),
+  }).index("by_code", ["code"]),
 });

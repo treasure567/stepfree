@@ -8,9 +8,9 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
 | Capability | Count / detail | Where |
 | --- | --- | --- |
-| Convex functions | **102** (35 public queries, 25 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
-| Tables | **21** | `convex/schema.ts` |
-| Indexes | **56** | every table fully indexed; no full scans |
+| Convex functions | **106** (37 public queries, 27 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
+| Tables | **22** | `convex/schema.ts` |
+| Indexes | **57** | every table fully indexed; no full scans |
 | Mounted components | **5** (auth, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
 | Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
 | Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
@@ -145,6 +145,8 @@ flowchart LR
 | `emergencies` | SOS lifecycle (raised→acknowledged→escalated→resolved) | `by_session`, `by_status`, `by_station`, `by_idempotency` |
 | `inboundMessages` | Parsed inbound email replies (AgentMail) | `by_provider_message`, `by_from`, `by_idempotency` |
 | `webhookReceipts` | Verified/duplicate/rejected webhook audit | `by_source_and_event`, `by_received_at` |
+| `emergencyNotes` | Traveller/operator note timeline on an SOS | `by_emergency` |
+| `proofRuns` | Immutable, shareable reroute receipts | `by_code` |
 
 ## Non-negotiables (kept from the safety model)
 

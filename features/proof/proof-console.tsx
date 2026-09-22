@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -27,7 +28,13 @@ import { ProofMap, type RoutePoint } from "@/features/proof/proof-map";
 import { BrandMark } from "@/shared/ui/brand-mark";
 import { getSessionId } from "@/shared/lib/session";
 
-type GuardResult = { key: string; held: boolean; detail: string };
+type AttackResult = {
+  key: string;
+  label: string;
+  held: boolean;
+  detail: string;
+  ms: number;
+};
 
 const sponsorChain = ["Firecrawl", "OpenAI", "Human review", "Convex", "AgentMail"];
 
@@ -54,7 +61,13 @@ export function ProofConsole() {
   );
   const [from, setFrom] = useState("waterloo");
   const [to, setTo] = useState("barbican");
-  const [guards, setGuards] = useState<GuardResult[]>([]);
+  const [attacks, setAttacks] = useState<{
+    results: AttackResult[];
+    held: number;
+    total: number;
+  } | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [journeying, setJourneying] = useState(false);
   const [speed, setSpeed] = useState(2);
@@ -83,7 +96,16 @@ export function ProofConsole() {
   const simulateOutage = useMutation(api.drill.simulateOutage);
   const resolveOutage = useMutation(api.drill.resolveOutage);
   const resetDrill = useMutation(api.drill.reset);
-  const attemptForged = useMutation(api.drill.attemptForgedIncident);
+  const runAttacksMutation = useMutation(api.drill.runAttacks);
+  const mintReceipt = useMutation(api.drill.mintReceipt);
+  const networkStatus =
+    useQuery(api.drill.networkStatus, sessionId ? { sessionId } : "skip") ?? [];
+  const searchParams = useSearchParams();
+  const runCode = searchParams.get("run");
+  const receipt = useQuery(
+    api.drill.getReceipt,
+    runCode ? { code: runCode } : "skip",
+  );
   const requestAlert = useMutation(api.alerts.requestDrillAlert);
   const raiseEmergency = useMutation(api.emergency.raise);
   const cancelEmergency = useMutation(api.emergency.cancel);
@@ -195,53 +217,44 @@ export function ProofConsole() {
     }
   };
 
-  const runGuards = useCallback(async () => {
+  const runAttacks = useCallback(async () => {
     if (!sessionId) return;
-    setBusy("guards");
-    const results: GuardResult[] = [];
+    setBusy("attacks");
     try {
-      const forged = await attemptForged({ sessionId });
-      results.push({
-        key: "Invented evidence is refused",
-        held: forged.rejected === true,
-        detail: forged.rejected
-          ? "A fabricated excerpt failed verbatim source verification; no incident created."
-          : "Unexpected: forged excerpt accepted.",
-      });
+      const outcome = await runAttacksMutation({ sessionId });
+      setAttacks(outcome);
     } catch {
-      results.push({
-        key: "Invented evidence is refused",
-        held: false,
-        detail: "Guard check could not run.",
-      });
+      setAttacks({ results: [], held: 0, total: 0 });
+    } finally {
+      setBusy(null);
     }
-    const isolated = baseline?.status === "ready" && baseline.rerouted === false;
-    results.push({
-      key: "One visitor cannot reroute another",
-      held: isolated,
-      detail: isolated
-        ? "A session with no disruption still holds the original route — isolated to this session."
-        : "Baseline session is not on the expected route.",
-    });
-    const reviewedGate =
-      live?.status === "ready"
-        ? live.incidents.every((i) => i.blocks === false || i.isDemo)
-        : true;
-    results.push({
-      key: "Unreviewed feeds cannot reroute",
-      held: reviewedGate,
-      detail:
-        "Live TfL advisories are context only; they never block until a human accepts them.",
-    });
-    setGuards(results);
-    setBusy(null);
-  }, [sessionId, attemptForged, baseline, live]);
+  }, [sessionId, runAttacksMutation]);
+
+  const onShareRescue = async () => {
+    if (!sessionId) return;
+    setBusy("share");
+    try {
+      const { code } = await mintReceipt({ sessionId, fromSlug: from, toSlug: to });
+      setShareCode(code);
+      try {
+        await navigator.clipboard.writeText(
+          `${window.location.origin}/proof?run=${code}`,
+        );
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      } catch {
+        /* clipboard blocked; the link is still shown */
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const changeJourney = async (nextFrom: string, nextTo: string) => {
     stopJourney();
     setFrom(nextFrom);
     setTo(nextTo);
-    setGuards([]);
+    setAttacks(null);
     if (sessionId && outageActive) {
       await resetDrill({ sessionId }).catch(() => undefined);
     }
@@ -275,7 +288,7 @@ export function ProofConsole() {
     setBusy("reset");
     try {
       await resetDrill({ sessionId });
-      setGuards([]);
+      setAttacks(null);
     } finally {
       setBusy(null);
     }
@@ -606,39 +619,77 @@ export function ProofConsole() {
 
         <section className="proof-block">
           <div className="proof-block-head">
-            <h2>Safety guarantees</h2>
+            <h2>Attack the reroute</h2>
+            {attacks ? (
+              <span
+                className={`proof-tag ${attacks.held === attacks.total ? "is-verified" : ""}`}
+              >
+                <BadgeCheck aria-hidden="true" /> {attacks.held}/{attacks.total} held
+              </span>
+            ) : null}
           </div>
+          <p className="proof-hint">
+            A wrong reroute strands a real person. Each attack runs the live
+            production code for this session, then reports whether the guardrail
+            held.
+          </p>
           <button
             type="button"
-            className="proof-button is-slim is-ghost"
-            onClick={runGuards}
+            className="proof-button is-slim is-danger"
+            onClick={runAttacks}
             disabled={busy !== null || !sessionId}
           >
-            <ShieldCheck aria-hidden="true" />
-            {busy === "guards" ? "Running…" : "Run the safety checks"}
+            <TriangleAlert aria-hidden="true" />
+            {busy === "attacks" ? "Running attacks…" : "Run the attacks"}
           </button>
-          {guards.length > 0 ? (
-            <ul className="proof-guard-list">
-              {guards.map((g) => (
-                <li key={g.key}>
-                  {g.held ? (
+          {attacks && attacks.results.length > 0 ? (
+            <ul className="proof-attack-list">
+              {attacks.results.map((a) => (
+                <li key={a.key}>
+                  {a.held ? (
                     <ShieldCheck className="is-held" aria-hidden="true" />
                   ) : (
                     <CircleSlash className="is-broken" aria-hidden="true" />
                   )}
                   <div>
-                    <strong>{g.key}</strong>
-                    <small>{g.detail}</small>
+                    <strong>
+                      {a.label}
+                      <span className="proof-attack-ms">{a.ms} ms</span>
+                    </strong>
+                    <small>{a.detail}</small>
                   </div>
                 </li>
               ))}
-              <li className="proof-guard-total">
-                <BadgeCheck aria-hidden="true" />
-                {guards.filter((g) => g.held).length}/{guards.length} guarantees held
-              </li>
             </ul>
           ) : null}
         </section>
+
+        {networkStatus.length > 0 ? (
+          <section className="proof-block">
+            <div className="proof-block-head">
+              <h2>Network status</h2>
+              <span className="proof-network-count">
+                {networkStatus.filter((s) => s.status === "operating").length}/
+                {networkStatus.length} step-free
+              </span>
+            </div>
+            <ul className="proof-network">
+              {networkStatus.map((s) => (
+                <li key={s.slug} className={`is-${s.status}`}>
+                  <span className="proof-network-dot" aria-hidden="true" />
+                  <span className="proof-network-name">{s.name}</span>
+                  <span className="proof-network-state">
+                    {s.status === "lift-down"
+                      ? "lift down"
+                      : s.status === "advisory"
+                        ? "advisory"
+                        : "operating"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <p className="proof-limits">
           Honest limits: a curated 9-station London pilot. Live TfL data is real
@@ -654,6 +705,38 @@ export function ProofConsole() {
       </aside>
 
       <div className="proof-stage">
+        {receipt ? (
+          <div className="proof-receipt-banner">
+            <div className="proof-receipt-head">
+              <BadgeCheck aria-hidden="true" /> Verified reroute receipt ·{" "}
+              <span className="proof-mono">{receipt.code}</span>
+            </div>
+            <strong>
+              {receipt.fromName} → {receipt.toName}
+            </strong>
+            <div className="proof-receipt-metrics">
+              <span>
+                {receipt.baselineMinutes} → {receipt.reroutedMinutes} min
+              </span>
+              {receipt.delayMinutes ? <span>+{receipt.delayMinutes} min</span> : null}
+              {receipt.via ? <span>via {receipt.via}</span> : null}
+              {receipt.affectedStation ? (
+                <span>{receipt.affectedStation} lift down</span>
+              ) : null}
+              <span>
+                {receipt.guardsHeld}/{receipt.guardsTotal} guards held
+              </span>
+            </div>
+            {receipt.sourceExcerpt ? (
+              <p className="proof-receipt-excerpt">“{receipt.sourceExcerpt}”</p>
+            ) : null}
+            {receipt.sourceHash ? (
+              <span className="proof-mono proof-receipt-hash">
+                hash {receipt.sourceHash.slice(0, 18)}… · {receipt.model ?? "model"}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         <ProofMap
           baseline={baselineReady ? toPoints(baselineReady.stations) : []}
           active={liveReady ? toPoints(liveReady.stations) : []}
@@ -697,6 +780,33 @@ export function ProofConsole() {
                   ? "Arrived · step-free the whole way"
                   : `Wheelchair en route · ${Math.round(progress * 100)}% · ${speed}×`}
               </small>
+            </div>
+          ) : null}
+          {rerouted && !journeying ? (
+            <div className="proof-trip-share">
+              <button
+                type="button"
+                className="proof-button is-slim is-ghost"
+                onClick={onShareRescue}
+                disabled={busy !== null}
+              >
+                <BadgeCheck aria-hidden="true" />
+                {busy === "share"
+                  ? "Minting…"
+                  : copied
+                    ? "Link copied ✓"
+                    : "Share this rescue"}
+              </button>
+              {shareCode ? (
+                <a
+                  className="proof-trip-sharelink"
+                  href={`/proof?run=${shareCode}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  /proof?run={shareCode}
+                </a>
+              ) : null}
             </div>
           ) : null}
         </div>
