@@ -664,7 +664,7 @@ export function AccessMap({
 
     const step = (ts: number) => {
       if (!lastTsRef.current) lastTsRef.current = ts;
-      const dt = ts - lastTsRef.current;
+      const dt = Math.min(ts - lastTsRef.current, 64);
       lastTsRef.current = ts;
       progressRef.current = Math.min(
         1,
