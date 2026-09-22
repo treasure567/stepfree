@@ -392,3 +392,68 @@ export const history = query({
       .paginate(args.paginationOpts);
   },
 });
+
+export const recent = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    return await ctx.db
+      .query("emergencies")
+      .withIndex("by_created_at")
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+
+export const stats = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOps(ctx);
+    const cap = 100;
+    const statuses = ["raised", "escalated", "acknowledged", "resolved"] as const;
+    const counts: Record<string, number> = {};
+    for (const status of statuses) {
+      const rows = await ctx.db
+        .query("emergencies")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .take(cap);
+      counts[status] = rows.length;
+    }
+    return counts;
+  },
+});
+
+export const assignedToMe = query({
+  args: {},
+  handler: async (ctx) => {
+    const operator = await requireOps(ctx);
+    const recentRows = await ctx.db
+      .query("emergencies")
+      .withIndex("by_created_at")
+      .order("desc")
+      .take(100);
+    return recentRows.filter(
+      (e) =>
+        e.assignedTo === operator &&
+        e.status !== "resolved" &&
+        e.status !== "cancelled",
+    );
+  },
+});
+
+export const timeline = query({
+  args: { emergencyId: v.id("emergencies") },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const emergency = await ctx.db.get(args.emergencyId);
+    if (!emergency) {
+      return null;
+    }
+    const notes = await ctx.db
+      .query("emergencyNotes")
+      .withIndex("by_emergency", (q) => q.eq("emergencyId", args.emergencyId))
+      .order("desc")
+      .take(50);
+    return { emergency, notes };
+  },
+});

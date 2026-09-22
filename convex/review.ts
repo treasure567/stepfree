@@ -3,7 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 
 const ACCEPTANCE_CONFIDENCE_THRESHOLD = 0.7;
 
@@ -23,7 +23,7 @@ function reviewBlockReason(candidate: Doc<"incidentCandidates">) {
   return null;
 }
 
-async function requireReviewer(ctx: MutationCtx) {
+async function requireReviewer(ctx: QueryCtx) {
   const userId = await getAuthUserId(ctx);
 
   if (!userId) {
@@ -167,5 +167,66 @@ export const rejectCandidate = mutation({
     });
 
     return { rejected: true };
+  },
+});
+
+export const recentRuns = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireReviewer(ctx);
+    const limit = Math.min(args.limit ?? 20, 100);
+    return await ctx.db
+      .query("monitoringRuns")
+      .withIndex("by_started_at")
+      .order("desc")
+      .take(limit);
+  },
+});
+
+export const candidatesForRun = query({
+  args: { runId: v.id("monitoringRuns") },
+  handler: async (ctx, args) => {
+    await requireReviewer(ctx);
+    return await ctx.db
+      .query("incidentCandidates")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .take(100);
+  },
+});
+
+export const recentlyReviewed = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireReviewer(ctx);
+    const limit = Math.min(args.limit ?? 15, 50);
+    const accepted = await ctx.db
+      .query("incidentCandidates")
+      .withIndex("by_review_status", (q) => q.eq("reviewStatus", "accepted"))
+      .order("desc")
+      .take(limit);
+    const rejected = await ctx.db
+      .query("incidentCandidates")
+      .withIndex("by_review_status", (q) => q.eq("reviewStatus", "rejected"))
+      .order("desc")
+      .take(limit);
+    return [...accepted, ...rejected]
+      .sort((a, b) => (b.reviewedAt ?? 0) - (a.reviewedAt ?? 0))
+      .slice(0, limit);
+  },
+});
+
+export const candidateDetail = query({
+  args: { candidateId: v.id("incidentCandidates") },
+  handler: async (ctx, args) => {
+    await requireReviewer(ctx);
+    const candidate = await ctx.db.get(args.candidateId);
+    if (!candidate) {
+      return null;
+    }
+    const run = await ctx.db.get(candidate.runId);
+    const station = candidate.resolvedStationId
+      ? await ctx.db.get(candidate.resolvedStationId)
+      : null;
+    return { candidate, run, station };
   },
 });

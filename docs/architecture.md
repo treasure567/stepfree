@@ -8,7 +8,7 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
 | Capability | Count / detail | Where |
 | --- | --- | --- |
-| Convex functions | **86** (23 public queries, 21 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
+| Convex functions | **102** (35 public queries, 25 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
 | Tables | **21** | `convex/schema.ts` |
 | Indexes | **56** | every table fully indexed; no full scans |
 | Mounted components | **5** (auth, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |

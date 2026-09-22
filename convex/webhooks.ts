@@ -195,3 +195,16 @@ export const recentInbound = query({
     return await ctx.db.query("inboundMessages").order("desc").take(limit);
   },
 });
+
+export const receiptsForSource = query({
+  args: { source: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const limit = Math.min(args.limit ?? 30, 100);
+    return await ctx.db
+      .query("webhookReceipts")
+      .withIndex("by_source_and_event", (q) => q.eq("source", args.source))
+      .order("desc")
+      .take(limit);
+  },
+});

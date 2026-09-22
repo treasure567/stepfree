@@ -19,6 +19,7 @@ import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as incidents from "../incidents.js";
 import type * as journeys from "../journeys.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_excerpt from "../lib/excerpt.js";
 import type * as lib_idempotency from "../lib/idempotency.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   incidents: typeof incidents;
   journeys: typeof journeys;
+  "lib/auth": typeof lib_auth;
   "lib/crypto": typeof lib_crypto;
   "lib/excerpt": typeof lib_excerpt;
   "lib/idempotency": typeof lib_idempotency;

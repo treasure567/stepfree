@@ -10,6 +10,16 @@ import {
 } from "./_generated/server";
 import { calculateTransitRoute } from "./lib/transit";
 import { rateLimiter } from "./lib/rateLimits";
+import { requireOps } from "./lib/auth";
+
+const alertStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("sending"),
+  v.literal("sent"),
+  v.literal("delivered"),
+  v.literal("bounced"),
+  v.literal("failed"),
+);
 import { validateEmail, validateSessionId } from "./lib/validation";
 import { sendRouteAlert } from "./providers/agentmail";
 
@@ -378,5 +388,54 @@ export const requeue = internalMutation({
 
     await ctx.db.patch(args.alertId, { status: "queued", updatedAt: Date.now() });
     return { requeued: true as const };
+  },
+});
+
+export const byStatus = query({
+  args: { status: alertStatusValidator, limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireOps(ctx);
+    const limit = Math.min(args.limit ?? 30, 100);
+    const rows = await ctx.db
+      .query("alerts")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .order("desc")
+      .take(limit);
+    return rows.map((alert) => ({
+      _id: alert._id,
+      status: alert.status,
+      reason: alert.reason,
+      recipientMasked: `${alert.email.slice(0, 1)}•••@${alert.email.split("@")[1] ?? ""}`,
+      fromName: alert.fromName,
+      toName: alert.toName,
+      providerMessageId: alert.providerMessageId ?? null,
+      attempts: alert.attempts,
+      updatedAt: alert.updatedAt,
+    }));
+  },
+});
+
+export const opsStats = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOps(ctx);
+    const cap = 100;
+    const statuses = [
+      "queued",
+      "sending",
+      "sent",
+      "delivered",
+      "bounced",
+      "failed",
+    ] as const;
+    const counts: Record<string, number> = {};
+    for (const status of statuses) {
+      const rows = await ctx.db
+        .query("alerts")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .take(cap);
+      counts[status] = rows.length;
+    }
+    return counts;
   },
 });
