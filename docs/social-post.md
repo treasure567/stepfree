@@ -1,66 +1,100 @@
-# StepFree — launch posts
+# StepFree launch kit
 
-Two ready-to-post drafts for the social-proof criterion. Lead with the human stakes; keep it tight and un-buzzwordy.
+## Recommended lead image
 
-**Links to include everywhere**
-- Live: https://whimsical-ferret-778.convex.site
-- Judge demo (no login): https://whimsical-ferret-778.convex.site/proof
-- Tags: @convex @OpenAI @firecrawl @agentmail · #AllGasHackathon
+Use `public/social/stepfree-station-reroute.png` for the first post. It tells the problem in one frame: a wheelchair user, a failed lift, and a visible alternate route.
 
----
+Attach one real screenshot from `/proof` as the second image. The generated visual earns attention. The product screenshot proves the build exists.
 
-## X / Twitter thread
+## Generated assets
 
-**1/**
-A wheelchair user heads for the Tube. The lift at her station just failed.
+| File | Format | Best use |
+| --- | --- | --- |
+| `public/social/stepfree-station-reroute.png` | 1672 by 941 | X or LinkedIn lead image |
+| `public/social/stepfree-system-route.png` | 1672 by 941 | Technical follow-up post or README visual |
+| `public/social/stepfree-commuter-reroute.png` | 1122 by 1402 | LinkedIn portrait or X image 2 |
 
-Normally she finds out when she reaches the barrier — stranded, no step-free way down.
+These are AI-generated concept visuals, not documentary photographs. Label them that way if the platform or post context could make a viewer think they depict a real user.
 
-StepFree emails her a new step-free route before she gets there.
+## X thread
 
-Built this weekend for #AllGasHackathon 🧵
+### Post 1
 
-**2/**
-When a station lift goes down, StepFree reroutes around it and sends the fix ahead of the barrier.
+A wheelchair user plans a 31-minute Tube journey.
 
-In the demo: 31 min via Bond Street → 36 via London Bridge. +5 minutes, 0 stairs — updated live, no refresh.
+Then one lift fails.
 
-**3/**
-The @convex "All Gas" field is strong. StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there.
+StepFree catches the evidence, reroutes her in real time, and sends the new step-free route before she reaches the barrier.
 
-Proactive, not reactive. That's the whole point.
+We built it for #AllGasHackathon.
 
-**4/**
-How it stays honest: @OpenAI reads the live status and must quote its source; @firecrawl gets the page; StepFree verifies that quote before it trusts it. Then deterministic code — not the AI — picks the route.
+### Post 2
 
-AI understands; code decides. @agentmail delivers.
+The live demo starts at Waterloo and reaches Barbican through Bond Street in 31 minutes.
 
-**5/**
-Try it, no login:
+Break the Bond Street lift and the route changes, without a refresh, to London Bridge in 36 minutes.
 
-Judge demo → https://whimsical-ferret-778.convex.site/proof
-Live → https://whimsical-ferret-778.convex.site
+Five extra minutes. Zero stairs. No dead end.
 
-Step-free should be the default. #AllGasHackathon
+### Post 3
 
----
+The safety rule is simple:
+
+AI reads the notice. It does not declare a route safe.
+
+Firecrawl fetches the official source. OpenAI returns structured evidence and an exact quote. StepFree verifies the quote. A human accepts it. Deterministic code chooses the route.
+
+### Post 4
+
+We attacked the reroute six ways through the production code:
+
+Fabricated evidence. Unreviewed data. Cross-session interference. Stale writes. Replayed actions. Duplicate effects.
+
+The product shows what it rejected and why.
+
+### Post 5
+
+Try the real product:
+
+Judge demo: https://whimsical-ferret-778.convex.site/proof
+
+Live app: https://whimsical-ferret-778.convex.site
+
+Built on Convex with OpenAI, Firecrawl, and AgentMail.
+
+#Accessibility #BuildInPublic
 
 ## LinkedIn post
 
-Most "monitoring" tools tell you something went wrong. StepFree makes sure you never hit the wall in the first place.
+A broken lift does not add five minutes to a wheelchair user's journey. It can end the journey.
 
-A wheelchair user is on her way to the Underground. The lift at her station fails. Today she usually finds out when she arrives — stranded at a barrier with no step-free way through.
+We built StepFree for that moment.
 
-StepFree watches live lift-status data, and the moment a station becomes impassable it reroutes her around the outage and emails the new step-free journey **before she reaches the barrier**. In our demo: 31 minutes via Bond Street becomes 36 via London Bridge — +5 minutes, zero stairs, updated live with no refresh.
+Maya plans Waterloo to Barbican. The route is 31 minutes through Bond Street. Then the Bond Street lift fails.
 
-We built it this weekend for the Convex "All Gas" hackathon on Convex, Firecrawl, OpenAI and AgentMail. The principle we cared most about: **AI understands, code decides.** OpenAI reads the live status and must quote the exact source line; StepFree verifies that quote against the page it scraped before trusting it. Then a deterministic routing algorithm — not the model — chooses the path. Nothing reroutes a real person on a hunch.
+StepFree catches the official notice, verifies the source, waits for human approval, and redraws the journey through London Bridge. The new route is 36 minutes and still step-free. Convex pushes the change to the map without a refresh. AgentMail is the delivery channel for the warning before Maya reaches the barrier.
 
-There are brilliant projects in this hackathon. StepFree makes sure a wheelchair user isn't stranded at a broken lift — and warns her before she gets there. For our travellers, that's the difference between a journey and a dead end.
+The rule behind the product is deliberate: AI reads the notice. It does not declare a route safe.
 
-Step-free should be the default, not a scramble.
+Firecrawl fetches the official source. OpenAI extracts structured incident data and must return the exact sentence it used. StepFree checks that quote against the source. A human accepts the incident. Deterministic graph search chooses the route.
 
-Try it (no login):
-Judge demo → https://whimsical-ferret-778.convex.site/proof
-Live → https://whimsical-ferret-778.convex.site
+The current build has 22 Convex tables, 57 indexes, 2 durable workflows, 2 bounded workpools, 4 crons, an operations console, a session-isolated judge drill, a shareable reroute receipt, and 100 automated tests. Those numbers are engineering evidence. The product is the five-minute detour that prevents a dead end.
 
-@convex @OpenAI @firecrawl @agentmail · #AllGasHackathon
+Try it without an account:
+
+Judge demo: https://whimsical-ferret-778.convex.site/proof
+
+Live app: https://whimsical-ferret-778.convex.site
+
+Built for the Convex All Gas Hackathon with OpenAI, Firecrawl, and AgentMail.
+
+#AllGasHackathon #Accessibility #BuildInPublic
+
+## Posting checklist
+
+- Use the lead concept image first and a real `/proof` screenshot second.
+- Add alt text: "Wheelchair user at a station with a failed lift while StepFree shows a step-free alternate route."
+- Publish the X thread and LinkedIn post while the demo link is live.
+- Reply to the launch post with the under-three-minute video.
+- Replace `LAUNCH_POST_URL` in `hackathon.md` with the strongest post.
+- Record the first-hour engagement count for the submission form.

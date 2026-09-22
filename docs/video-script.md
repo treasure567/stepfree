@@ -1,55 +1,73 @@
-# StepFree — 2:50 demo video script
+# StepFree 2:50 demo video
 
-**Rule:** talk less, click the real product. Everything below happens live on
-`https://whimsical-ferret-778.convex.site`. No slides. Screen-record at 1080p, cursor visible.
+Talk less. Click the real product. Record at 1080p with the cursor visible. Use the production URL, not localhost.
 
-**Before you record:** on the AgentMail dashboard, make sure the API key has
-`message_send` permission (see README → Honest limits). If the email still can't
-send at record time, use the *alternate* line at 1:35 and let the status panel
-show the real pipeline instead of a delivered receipt — do not fake it.
+Before recording, reset the drill and test the full path once. AgentMail delivery is live over SMTP — show the alert reaching the `sent` state with its real provider message id. If a send ever fails on the day, use the honest alternate line below and show the real failed provider state rather than implying delivery succeeded.
 
-**One-line thesis to keep in your head:** *AI reads the notice; it never decides a route is safe. A human-reviewed incident and deterministic code do that — and the traveller is warned before the barrier.*
+## 0:00 to 0:12, the human problem
 
----
+**Screen:** Open the production landing page.
 
-### 0:00–0:12 — The problem (landing hero)
-**Screen:** open `/` — the hero.
-**VO:** "A broken lift can end a wheelchair user's journey. Not slow it down — end it. StepFree makes sure it doesn't."
+**Voice:** "A broken lift can end a wheelchair user's journey. StepFree finds the evidence, reroutes the journey, and warns the traveller before the barrier."
 
-### 0:12–0:30 — Open the live proof (no login)
-**Screen:** click through to `/proof`. The route draws on the **live map** with numbered station markers: *Waterloo → … → Bond Street → … → Barbican, 31 minutes.* (You can change the From/To stations on camera if you want.)
-**VO:** "This is production, no login. Maya's step-free route on a live map: Waterloo to Barbican, thirty-one minutes, through Bond Street."
+## 0:12 to 0:29, the baseline
 
-### 0:30–0:58 — The evidence, and the boundary
-**Screen:** scroll to the **Evidence** panel. Point the cursor at: Source (Transport for London), Model (gpt-5.4-mini), Content hash, the verbatim excerpt, the **"Excerpt verified"** badge, and **"Pending — cannot reroute yet."**
-**VO:** "Firecrawl scraped the official TfL page. OpenAI turned it into a structured incident — and had to quote the exact sentence it relied on. StepFree checks that quote exists, word for word, in the source. But it's still pending. AI can read the notice. It cannot declare a route safe."
+**Screen:** Open `/proof`. Keep the route and metrics visible.
 
-### 0:58–1:28 — The live reroute (the money shot)
-**Screen:** click **"Break a lift on this route."** Do NOT refresh. Keep the map in frame: Bond Street turns **red ("lift down")**, the original line fades, and a **new line redraws through London Bridge** while the headline flips *31 → 36*, *+5 min*. Linger on "Convex live query · no refresh."
-**VO:** "A human accepts the evidence. Now watch the map — no refresh. Convex reroutes her live around the broken lift, through London Bridge. Thirty-six minutes, five longer, still fully step-free."
+**Voice:** "This is the live judge demo. Maya is travelling from Waterloo to Barbican. The step-free route is 31 minutes through Bond Street."
 
-### 1:28–1:52 — The alert, before the barrier
-**Screen:** click **"Send the reroute alert."** Show the receipt: status → **sent**, the masked recipient, the provider **message ID**.
-**VO (if delivering):** "AgentMail warns her — the new route, the added time — before she reaches the barrier. One incident, one email, with the provider's message ID."
-**VO (alternate, if send is still key-gated):** "AgentMail sends the warning through the same pipeline — queued, de-duplicated, one incident, one email. Here's the live delivery status; the send key is being provisioned."
+## 0:29 to 0:53, prove the evidence boundary
 
-### 1:52–2:14 — Try to break the safety
-**Screen:** click **"Run the safety checks."** Let the list resolve to **held**: invented evidence refused; one judge can't reroute another; unreviewed feeds can't reroute.
-**VO:** "A wrong reroute strands a real person, so we attack our own guards. A fabricated quote is refused. One visitor's drill can't touch another's route. Even the official live feed is advisory until a human accepts it. All held."
+**Screen:** Show the Evidence panel. Point to the TfL source, model, source hash, exact excerpt, and pending state.
 
-### 2:14–2:34 — The live map
-**Screen:** click **"Open live map"** → `/navigate`. Show the same session's reroute on the map; toggle a mobility preference if time.
-**VO:** "Same journey on the live map — the reroute follows you here too, shaped by your mobility needs, not the average traveller's."
+**Voice:** "Firecrawl fetched the official TfL page. OpenAI returned a structured incident and the exact sentence it relied on. StepFree verifies that quote against the source. It is still pending because AI cannot declare a route safe."
 
-### 2:34–2:50 — Close
-**Screen:** back to `/proof`, rest on the 31 → 36 headline. Optionally flash the architecture diagram for 2 seconds.
-**VO:** "Firecrawl, OpenAI, AgentMail — real work, on Convex, on convex.site. Other apps help a team catch more talks. StepFree keeps a wheelchair user from being stranded at a broken lift — and warns her before she gets there."
+## 0:53 to 1:17, the live reroute
 
----
+**Screen:** Press **Break a lift on this route**. Do not refresh. Keep the map and 31 to 36 change in one uninterrupted shot.
+
+**Voice:** "A human accepts the incident. Convex updates the journey live, with no refresh. Bond Street is excluded and the route moves through London Bridge. Thirty-six minutes, five longer, still step-free."
+
+## 1:17 to 1:38, attack the safety controls
+
+**Screen:** Press **Run the attacks**. Show the six results and final held count.
+
+**Voice:** "A wrong reroute can strand a real person, so the demo attacks the production guards. Fabricated evidence, unreviewed data, cross-session interference, stale writes, replayed actions, and duplicate effects are refused. The screen says what failed and how long each check took."
+
+## 1:38 to 1:57, make the proof permanent
+
+**Screen:** Press **Share this rescue**. Show the verified receipt and copied `/proof?run=` link.
+
+**Voice:** "This receipt preserves the before route, the new route, the affected lift, the source hash, model, and all six safety results. Anyone with the link can inspect the same proof."
+
+## 1:57 to 2:16, show the traveller outcome
+
+**Screen:** Start the on-map journey simulation. Let the wheelchair marker move. Open SOS briefly if the timing works.
+
+**Voice:** "The product follows the traveller, not just the incident. The wheelchair moves along the accessible route, and an SOS creates a timed emergency case for the operations team."
+
+## 2:16 to 2:34, show the alert truthfully
+
+**Screen:** Press **Send the reroute alert** and show the real status.
+
+**Voice if delivery succeeds:** "AgentMail sends the new route before Maya reaches the barrier. The receipt stores the masked recipient, status, and provider message ID. Duplicate sends collapse to one alert."
+
+**Alternate voice if a send fails on the day:** "The application queues and deduplicates the alert, but this delivery failed at the provider. The product shows that failure and lets us requeue, instead of inventing a delivery."
+
+## 2:34 to 2:50, close on the result
+
+**Screen:** Return to the 31 to 36 route result. End with the live URL and repository.
+
+**Voice:** "StepFree is live on Convex, with OpenAI, Firecrawl, and AgentMail doing product work. One broken lift. Five extra minutes. No dead end."
 
 ## Capture checklist
-- [ ] AgentMail key can send (or use the alternate 1:35 line).
-- [ ] Reset the drill once before recording so the baseline reads 31 min.
-- [ ] Record `/proof` top-to-bottom in one take; the reroute must be a single unbroken shot (no cut between click and update).
-- [ ] Keep total under 3:00; aim for 2:50.
-- [ ] End card: live URL + `/proof` + repo.
+
+- [ ] Production `/proof` starts at the 31-minute baseline.
+- [ ] The reroute is one uncut shot from button press to map update.
+- [ ] All six attacks show held.
+- [ ] The shareable receipt opens in a private window.
+- [ ] The AgentMail line matches the real provider result.
+- [ ] No secret, private email address, or admin credential appears.
+- [ ] The video is under 3:00, ideally 2:45 to 2:50.
+- [ ] The end card contains the live URL, `/proof`, and repository.
+- [ ] `VIDEO_URL` in `hackathon.md` is replaced after upload.

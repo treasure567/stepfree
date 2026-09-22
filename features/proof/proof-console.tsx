@@ -607,10 +607,16 @@ export function ProofConsole() {
                   ? `msg ${latestAlert.providerMessageId.slice(0, 16)}…`
                   : "msg —"}
               </span>
+              {latestAlert.status === "sent" ? (
+                <p className="proof-hint">
+                  Delivered through AgentMail — the provider message id above is
+                  the real receipt.
+                </p>
+              ) : null}
               {latestAlert.status === "failed" ? (
                 <p className="proof-hint">
-                  Send blocked upstream — the AgentMail key needs
-                  <code> message_send</code>. Queue, idempotency and status are intact.
+                  Delivery failed upstream. Queue, idempotency and status are
+                  intact — requeue to retry.
                 </p>
               ) : null}
             </div>
@@ -630,8 +636,8 @@ export function ProofConsole() {
           </div>
           <p className="proof-hint">
             A wrong reroute strands a real person. Each attack runs the live
-            production code for this session, then reports whether the guardrail
-            held.
+            production code on a throwaway scope, reports whether the guardrail
+            held (with timings), then cleans up after itself — nothing is mocked.
           </p>
           <button
             type="button"

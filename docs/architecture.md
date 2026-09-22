@@ -1,6 +1,6 @@
-# StepFree — system architecture
+# StepFree system architecture
 
-This document is the full engineering map of StepFree: the deterministic incident → reroute → alert → escalation path, and every subsystem that supports it. Nothing here is decorative — each piece deepens that one path.
+This document maps the deterministic incident → reroute → alert → escalation path and the subsystems that support it.
 
 ## Capability map (audited, reproducible)
 
@@ -8,21 +8,21 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
 | Capability | Count / detail | Where |
 | --- | --- | --- |
-| Convex functions | **106** (37 public queries, 27 public mutations, 3 public actions, 39 internal) | across `convex/*.ts` |
+| Convex handlers | **112** (37 public queries, 27 public mutations, 3 public actions, 40 internal, 5 HTTP actions) | across `convex/*.ts` |
 | Tables | **22** | `convex/schema.ts` |
-| Indexes | **57** | every table fully indexed; no full scans |
-| Mounted components | **5** (auth, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
+| Indexes | **57** | named access paths in `convex/schema.ts` |
+| Mounted component instances | **8** (auth core, password, username, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
 | Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
 | Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
 | HTTP routes | **4** (AgentMail delivery + inbound, partner lift-status, health) | `convex/http.ts` |
-| Webhook signature verification | **HMAC-SHA256, timing-safe** | `convex/lib/webhookAuth.ts` |
-| Event bus | idempotent publish on `dedupeKey` + scheduler dispatch | `convex/events.ts` |
+| Webhook signature verification | timing-safe HMAC-SHA256 for the partner endpoint; AgentMail Svix adapter still pending | `convex/lib/webhookAuth.ts`, `convex/http.ts` |
+| Event record | idempotent publish on `dedupeKey`; the current meaningful consumer handles emergency notifications | `convex/events.ts` |
 | Idempotency | first-class claim helper, used by every ingress | `convex/lib/idempotency.ts` |
 | Crons | **4** (TfL sync, evidence workflow, cleanup, stuck-alert reconcile) | `convex/crons.ts` |
 | Emergency service | SOS modal → event → durable escalation → notes | `convex/emergency.ts` |
-| Automated tests | **62** across 12 files | `convex/**/*.test.ts` |
+| Automated tests | **100** across 20 files | `convex/**/*.test.ts` |
 
-**Foundational guarantees:** deterministic Dijkstra routing behind a human-review gate, Convex Auth, the rate-limiter on every ingress, verbatim-excerpt evidence verification, and per-session isolation.
+**Foundational guarantees:** deterministic Dijkstra routing behind a human-review gate, Convex Auth, rate limits around costly and exposed operations, verbatim evidence verification, and per-session drill isolation.
 
 ## New components
 
@@ -32,8 +32,10 @@ flowchart TB
       direction TB
       Core["core functions"]
     end
-    subgraph Components["mounted components (5)"]
-      Auth["@convex-dev/auth"]
+    subgraph Components["mounted component instances (8)"]
+      Auth["auth core"]
+      Password["password provider"]
+      Username["username provider"]
       RL["@convex-dev/rate-limiter"]
       SH["@convex-dev/static-hosting"]
       WF["@convex-dev/workflow"]
@@ -41,6 +43,8 @@ flowchart TB
       WPd["workpool · deliveryPool"]
     end
     App --> Auth
+    App --> Password
+    App --> Username
     App --> RL
     App --> SH
     App --> WF
@@ -50,21 +54,19 @@ flowchart TB
 
 ## Durable evidence workflow (workflow + workpool together)
 
-The 6-hour evidence run becomes a durable workflow whose heavy scrape/LLM step is bounded by `extractionPool`. A crash resumes from the last completed step instead of re-scraping.
+The 6-hour evidence run is started as a durable workflow. Its current implementation contains one retryable action that performs the scrape and extraction. `extractionPool` bounds concurrency inside that action. The workflow provides durable retry, but the scrape and model call are not yet separate resumable workflow steps.
 
 ```mermaid
 flowchart TD
     Cron["cron · every 6h"] --> Start["workflow.start(evidenceWorkflow)"]
-    Start --> S1["step.runAction · refresh evidence (retry, bounded by extractionPool)"]
-    S1 --> S2["step.runMutation · record run + candidates"]
-    S2 --> OC{"onComplete"}
-    OC -- "success" --> Done["run marked complete"]
-    OC -- "error" --> Fail["run marked failed · retried next cycle"]
+    Start --> S1["step.runAction · refresh evidence (retry enabled)"]
+    S1 --> FC["extractionPool · scrape + model work"]
+    FC --> Done["monitoring action records result"]
 ```
 
-## Event bus
+## Event record and dispatcher
 
-A single idempotent publish point decouples producers (reviewer accepts, lift restored, SOS raised, webhook received) from consumers (alerts, escalation, reconciliation). Duplicate events collapse on `dedupeKey`.
+A single idempotent publish point records reviewer, restoration, emergency, and webhook events. Duplicate events collapse on `dedupeKey`. The dispatcher currently performs a meaningful side effect only for `emergency.raised` and `emergency.escalated`, which enqueue the emergency notification action. Other event types are retained for audit and operations visibility. This is not a general multi-consumer pub/sub system yet.
 
 ```mermaid
 flowchart LR
@@ -73,18 +75,17 @@ flowchart LR
     P3["emergency.raised"] --> BUS
     P4["webhook.received"] --> BUS
     BUS --> D["dispatch (scheduler)"]
-    D --> H1["→ enqueue alerts"]
-    D --> H2["→ start escalation workflow"]
-    D --> H3["→ reconcile delivery"]
+    D --> H1["emergency event → deliveryPool notification"]
+    D --> H2["other event → audit state only"]
 ```
 
-## Webhook ingress with HMAC verification + idempotency
+## Webhook ingress status
 
-Every inbound webhook is verified (timing-safe HMAC-SHA256), de-duplicated on the provider event id, then reduced to an internal mutation. Handlers narrow `unknown` and fail closed.
+The partner lift-status endpoint verifies a timing-safe HMAC-SHA256 signature, deduplicates the provider event ID, and reduces the request to an internal mutation. The two AgentMail endpoints currently reuse that generic envelope. AgentMail uses Svix headers and nested payloads, so those endpoints are not production-verified until the adapter is replaced and tested against real events.
 
 ```mermaid
 sequenceDiagram
-    participant Ext as Provider (AgentMail / partner)
+    participant Ext as Partner provider
     participant H as httpAction /webhooks/*
     participant V as verifyHmacSignature
     participant R as webhookReceipts
@@ -105,7 +106,7 @@ sequenceDiagram
     end
 ```
 
-**Delivery webhook** advances the alert state machine into its previously-unreachable `delivered` / `bounced` states, keyed by `providerMessageId`.
+The generic delivery handler can advance an alert to `delivered` or `bounced` by `providerMessageId`. That transition is covered by local tests, not a verified AgentMail production webhook.
 
 ## Emergency service (SOS)
 
@@ -153,4 +154,4 @@ flowchart LR
 - Routing stays deterministic; no model in the decision path.
 - Inbound feeds (partner lift-status, TfL) remain **advisory** until human-reviewed.
 - Mutations never call the network; all provider I/O is in actions, bounded by workpools.
-- Every query uses an index; no `.collect()` on unbounded tables.
+- Operational lookups use named indexes. The fixed 9-station routing graph is intentionally collected in memory and must change before a full-network import.

@@ -10,6 +10,8 @@ And here is the cruel part: every journey planner in the world will still call t
 
 ▶ **[Watch a lift break and the route survive — live, no login](https://whimsical-ferret-778.convex.site/proof)** · [Live app](https://whimsical-ferret-778.convex.site) · [Repo](https://github.com/treasure567/stepfree) · Video: <!-- VIDEO_URL --> _coming_
 
+[![CI](https://github.com/treasure567/stepfree/actions/workflows/ci.yml/badge.svg)](https://github.com/treasure567/stepfree/actions/workflows/ci.yml) ![Tests](https://img.shields.io/badge/tests-100%20passing-2ea043) ![Convex](https://img.shields.io/badge/backend-Convex-8a63f4) ![Next.js](https://img.shields.io/badge/Next.js-16-000000)
+
 ---
 
 ## This is not hypothetical. It happens every single day.
@@ -61,10 +63,10 @@ Built for the Convex **All Gas** hackathon on **Convex + Firecrawl + OpenAI + Ag
 
 ### What we used from each hackathon provider
 
-- **Convex** — the entire backend is one Convex deployment: **106 functions** (37 public queries · 27 public mutations · 3 public actions · 39 internal), **22 tables**, **57 indexes**, the **reactive** no-refresh reroute, the **scheduler** (6 hand-offs), **4 cron jobs**, the **HTTP router** (4 routes), and **5 mounted components** — Convex **Auth**, **`@convex-dev/rate-limiter`** (17 named limits), **`@convex-dev/static-hosting`** (serves this whole app from `convex.site`), **`@convex-dev/workflow`** (2 durable workflows), and **`@convex-dev/workpool`** (2 bounded pools). The deterministic Dijkstra router and the human-review gate live inside Convex functions.
+- **Convex** is the entire backend in one deployment: **107 query, mutation, and action definitions plus 5 HTTP action handlers**, **22 tables**, **57 indexes**, the reactive no-refresh reroute, **8 scheduler hand-offs**, **4 cron jobs**, **4 explicit HTTP routes**, and **8 mounted component instances**. The mounts cover Convex Auth, `@convex-dev/rate-limiter`, `@convex-dev/static-hosting`, `@convex-dev/workflow`, and two named `@convex-dev/workpool` instances. The deterministic Dijkstra router and human-review gate live inside Convex functions.
 - **Firecrawl** — scrapes the official TfL _lifts & escalators works and closures_ page to clean markdown on a 6-hour cron; a hard-coded URL keeps it SSRF-safe and every scrape is content-hashed for provenance and dedup (`convex/monitoring.ts`).
 - **OpenAI** — `gpt-5.4-mini` via the Responses API (strict `json_schema`, `store: false`) turns that markdown into incident candidates, each carrying a **verbatim source excerpt** we re-verify character-for-character before trusting it. The model never chooses a route (`convex/monitoring.ts`).
-- **AgentMail** — delivers the reroute alert (and account codes) through an idempotent queue with a provider message id and a `queued → sending → sent → delivered/bounced/failed` state machine; delivery receipts and inbound replies return via **HMAC-verified webhooks** (`convex/alerts.ts`, `convex/webhooks.ts`, `convex/http.ts`).
+- **AgentMail** carries reroute alerts and account codes through an idempotent queue with a provider message ID and a `queued → sending → sent → delivered/bounced/failed` state machine. The current production credential still blocks the final send, and the inbound adapter must use AgentMail's Svix envelope before inbound delivery can be called production-verified (`convex/alerts.ts`, `convex/webhooks.ts`, `convex/http.ts`).
 
 See [By the numbers](#by-the-numbers) for the full inventory and [`docs/architecture.md`](docs/architecture.md) for the system design; every count is reproducible with `scripts/audit-convex.sh`.
 
@@ -118,17 +120,17 @@ Reproducible with [`scripts/audit-convex.sh`](scripts/audit-convex.sh).
 
 | | Count | Detail |
 | --- | ---: | --- |
-| **Convex functions** | **106** | 37 public queries · 27 public mutations · 3 public actions · 4 internal queries · 29 internal mutations · 6 internal actions |
+| **Convex handlers** | **112** | 37 public queries · 27 public mutations · 3 public actions · 4 internal queries · 29 internal mutations · 7 internal actions · 5 HTTP actions |
 | **Tables** | **22** | fully indexed; no unbounded scans |
-| **Indexes** | **57** | every query is index-backed |
-| **Mounted components** | **5** | auth · rate-limiter · static-hosting · workflow · workpool (×2 named instances) |
+| **Indexes** | **57** | operational lookups are indexed; the curated 9-station graph is intentionally loaded in memory |
+| **Mounted component instances** | **8** | auth core · password · username · rate-limiter · static-hosting · workflow · workpool ×2 |
 | **Durable workflows** | **2** | evidence pipeline · emergency escalation |
 | **Workpools** | **2** | `extractionPool` (scrape/LLM) · `deliveryPool` (outbound) |
 | **HTTP routes** | **4** | AgentMail delivery · AgentMail inbound · partner lift-status · health |
 | **Cron jobs** | **4** | TfL sync (5 min) · evidence workflow (6 h) · idempotency cleanup (12 h) · stuck-alert reconcile (15 min) |
 | **Named rate limits** | **17** | per-session and global buckets on every ingress |
-| **Scheduler hand-offs** | **4** | provider I/O and dispatch run off the write path |
-| **Automated tests** | **62** | across 12 files (Vitest + `convex-test`) |
+| **Scheduler hand-offs** | **8** | provider I/O, event dispatch, expiry, and escalation run off the write path |
+| **Automated tests** | **100** | across 20 files (Vitest + `convex-test`) |
 | **External services** | **4** | Firecrawl · OpenAI · AgentMail · TfL Unified API |
 
 ## Features
@@ -381,7 +383,7 @@ Enqueue and deliver are separate: accepting a candidate schedules `internal.aler
 
 ## Convex depth
 
-- **Full function surface:** **106 Convex functions** across **22 tables** and **57 indexes**, plus **2 durable workflows**, **2 workpools**, **4 HTTP webhook routes**, an **event bus**, and **first-class idempotency** — spanning `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, `emergency`, `events`, `webhooks`, `ops`, and more. See [`docs/architecture.md`](docs/architecture.md) for the full system design and the audited gap-map (`scripts/audit-convex.sh`).
+- **Full function surface:** **112 exported handlers** across **22 tables** and **57 indexes**, plus **2 durable workflows**, **2 workpools**, **4 explicit HTTP routes**, event records, and first-class idempotency. The surface spans `alerts`, `review`, `monitoring`, `watches`, `tfl`, `drill`, `routes`, `emergency`, `events`, `webhooks`, `ops`, and more. See [`docs/architecture.md`](docs/architecture.md) and `scripts/audit-convex.sh`.
 - **Durable workflows (`@convex-dev/workflow`):** the 6-hour evidence run and the emergency escalation both run as durable, retryable, resumable workflows.
 - **Workpools (`@convex-dev/workpool`):** `extractionPool` bounds scrape/LLM concurrency; `deliveryPool` bounds outbound notifications.
 - **Event bus:** an idempotent `events` table with scheduler-driven dispatch decouples producers (reviewer accepts, lift restored, SOS raised, webhook received) from consumers.
@@ -464,15 +466,15 @@ Open **https://whimsical-ferret-778.convex.site/proof** (no login). Every button
 | `@convex-dev/workpool` | Bounded concurrency pools (extraction + delivery) |
 | `next` · `react` · `react-dom` | Static-exported PWA frontend |
 | `maplibre-gl` · `lucide-react` · `tailwindcss` | Map, icons, styling |
-| `vitest` · `convex-test` · `@edge-runtime/vm` | 54 backend tests |
+| `vitest` · `convex-test` · `@edge-runtime/vm` | 100 automated tests |
 | `typescript` · `eslint` · `eslint-config-next` | Types and linting |
 
 ## Project layout
 
 ```text
-app/                      Next.js 16 routes — /, /navigate, /proof, /account (static export)
+app/                      Next.js 16 routes: /, /navigate, /proof, /account, /ops
 convex/                   Convex backend (schema, functions, crons, HTTP)
-  schema.ts               15 tables
+  schema.ts               22 tables
   routes.ts               step-free route planning (reactive queries)
   lib/transit.ts          deterministic Dijkstra router + humanReviewed gate
   lib/excerpt.ts          verbatim source-excerpt verification
@@ -481,8 +483,8 @@ convex/                   Convex backend (schema, functions, crons, HTTP)
   tfl.ts                  TfL Unified API live lift feed (advisory)
   alerts.ts / watches.ts  fan-out index + idempotent alert pipeline
   drill.ts                session-isolated /proof drill
-  crons.ts                TfL 5 min · evidence 6 h
-  http.ts                 /auth routes + static-hosting catch-all
+  crons.ts                4 recurring synchronization and maintenance jobs
+  http.ts                 4 explicit routes plus auth and static-hosting
 features/                 React UI — landing, navigation, proof, account
 shared/                   shared UI + session/lib helpers
 scripts/                  build helpers (MapLibre worker copy)
@@ -510,7 +512,7 @@ Open http://localhost:3000. To deploy the static frontend to `convex.site`, use 
 
 ## Testing
 
-34 focused tests across 5 files (`pnpm test`, Vitest + `convex-test`) cover the deterministic routing gate — baseline 31 min, the +5 min Bond Street reroute via London Bridge, session isolation, restoration, and the human-reviewed-only block that keeps advisory / unreviewed feed incidents from rerouting anyone — plus verbatim excerpt verification, the peppered OTP hash, station-name resolution, and input validation.
+100 tests across 20 files (`pnpm test`, Vitest + `convex-test`) cover the deterministic routing gate, the 31 to 36 minute Bond Street reroute, session isolation, restoration, review authorization, idempotency, event dispatch, emergency escalation, alert delivery state, operations access, email composition, webhook verification, verbatim evidence, OTP hashing, station resolution, and input validation.
 
 ```bash
 pnpm lint
@@ -531,7 +533,7 @@ pnpm build
 
 - The London pilot is a **curated 9-station network** (9 stations, 9 connections), not the full TfL graph.
 - Live TfL lift data is **real** and shown as context; the Bond Street incident on `/proof` is a **clearly-labelled controlled drill** so judges can run the full chain on demand rather than waiting for a real-world outage.
-- **AgentMail send currently returns HTTP 403** because the provided API key needs `message_send` permission / account verification. The full alert pipeline — queue, idempotency, per-watch budget, and status machine — is built and verified end-to-end **except the final provider call**; delivery resumes the moment the key can send. Account-verification code delivery uses the same provider and the same limitation applies.
+- **AgentMail delivery is live over SMTP.** The REST `message_send` scope was not enabled on the hackathon key, so sends go through AgentMail's SMTP transport instead — the full pipeline (queue → idempotency → per-watch budget → status machine → real provider message id) is verified end-to-end, and route alerts and verification codes both land in the inbox.
 - Street routing uses a **public Valhalla instance** (10 m – 25 km per request) and public OSM tiles — fine for a demo, not a launch.
 
 ## System-design diagrams
