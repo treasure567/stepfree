@@ -115,10 +115,13 @@ http.route({
     }
 
     const eventType = (
-      asString(pick(body, "type", "event", "event_type")) ?? "unknown"
+      asString(pick(body, "event_type", "eventType", "event", "type")) ??
+      "unknown"
     ).toLowerCase();
-    const message = asObject(pick(body, "message", "data")) ?? body;
-    const eventId = asString(pick(body, "id", "eventId")) ?? svix.id!;
+    const message =
+      asObject(pick(body, "message", "delivery", "bounce", "data")) ?? body;
+    const eventId =
+      asString(pick(body, "event_id", "eventId", "id")) ?? svix.id!;
     const providerMessageId =
       asString(pick(message, "message_id", "messageId", "id")) ?? eventId;
     const payload = JSON.stringify(body);

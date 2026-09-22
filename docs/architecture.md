@@ -8,9 +8,9 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 
 | Capability | Count / detail | Where |
 | --- | --- | --- |
-| Convex handlers | **112** (37 public queries, 27 public mutations, 3 public actions, 40 internal, 5 HTTP actions) | across `convex/*.ts` |
-| Tables | **22** | `convex/schema.ts` |
-| Indexes | **57** | named access paths in `convex/schema.ts` |
+| Convex handlers | **117** (41 public queries, 27 public mutations, 3 public actions, 42 internal, 4 HTTP actions) | across `convex/*.ts` |
+| Tables | **23** | `convex/schema.ts` |
+| Indexes | **61** | named access paths in `convex/schema.ts` |
 | Mounted component instances | **8** (auth core, password, username, rate-limiter, static-hosting, workflow, workpool ×2) | `convex/convex.config.ts` |
 | Durable workflows | **2** (evidence pipeline, emergency escalation) | `convex/workflows.ts` |
 | Workpools | **2** (`extractionPool`, `deliveryPool`) | `convex/pools.ts` |
@@ -20,7 +20,7 @@ Numbers come from `scripts/audit-convex.sh`, run against this repo.
 | Idempotency | first-class claim helper, used by every ingress | `convex/lib/idempotency.ts` |
 | Crons | **4** (TfL sync, evidence workflow, cleanup, stuck-alert reconcile) | `convex/crons.ts` |
 | Emergency service | SOS modal → event → durable escalation → notes | `convex/emergency.ts` |
-| Automated tests | **100** across 20 files | `convex/**/*.test.ts` |
+| Automated tests | **107** across 22 files | `convex/**/*.test.ts` |
 
 **Foundational guarantees:** deterministic Dijkstra routing behind a human-review gate, Convex Auth, rate limits around costly and exposed operations, verbatim evidence verification, and per-session drill isolation.
 
